@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+logs/
+*.mp4
+.agents/
+.codex/
+backup_v3*/
+wandb/

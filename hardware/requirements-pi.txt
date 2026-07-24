@@ -1,0 +1,5 @@
+# Runtime packages not supplied by Raspberry Pi OS for k2_walk_ik.
+# The venv is created with --system-site-packages to reuse apt's numpy/scipy.
+mujoco==3.6.0
+feetech-servo-sdk==1.0.0
+onnxruntime==1.27.0

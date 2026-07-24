@@ -1,0 +1,30 @@
+"""MDP functions for K2 in-place tasks.
+
+Re-exports mjlab's velocity-task MDP (rewards, observations, events, terms) and
+adds the K2-specific gait command + gait-aware rewards.
+"""
+
+# Reuse everything mjlab already provides for legged locomotion.
+from mjlab.tasks.velocity.mdp import *  # noqa: F401,F403
+from mjlab.tasks.velocity import mdp as _vel_mdp  # noqa: F401
+
+# K2 custom terms.
+from k2_rl.mdp.actions import (  # noqa: F401
+  DelayedJointPositionAction,
+  DelayedJointPositionActionCfg,
+)
+from k2_rl.mdp.gait_command import GaitCommand, GaitCommandCfg  # noqa: F401
+from k2_rl.mdp.rewards import (  # noqa: F401
+  action_rate_soft_limit_l2,
+  base_ang_vel_xy_l2,
+  base_height_l2,
+  base_lin_vel_xy_l2,
+  base_tilt_l2,
+  base_xy_position_l2,
+  feet_planted,
+  feet_lateral_clearance_l2,
+  feet_under_base_l2,
+  feet_xy_vel_l2,
+  gait_contact,
+  gait_swing,
+)

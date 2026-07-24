@@ -1,0 +1,350 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot name="K2">
+  <material name="Steel">
+    <color rgba="0.965 0.965 0.953 1.0" />
+  </material>
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0.027974 0.045381 0.000973" rpy="0 0 0" />
+      <mass value="0.100000" />
+      <inertia ixx="7.930775e-05" ixy="7.868643e-08" ixz="2.218753e-08" iyy="3.682860e-05" iyz="-8.314226e-07" izz="1.104504e-04" />
+    </inertial>
+    <visual>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/base_link.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="0.000000 0.000000 0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/base_link_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Hip_pitch_right">
+    <inertial>
+      <origin xyz="-0.001643 -0.005693 0.000044" rpy="0 0 0" />
+      <mass value="0.076000" />
+      <inertia ixx="1.219303e-05" ixy="-2.119644e-06" ixz="8.301769e-09" iyy="7.851774e-06" iyz="7.605348e-08" izz="1.707018e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.094850 0.025500 0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_pitch_right.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.094850 0.025500 0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_pitch_right_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Hip_pitch_left">
+    <inertial>
+      <origin xyz="-0.001643 -0.005693 -0.000044" rpy="0 0 0" />
+      <mass value="0.076000" />
+      <inertia ixx="1.219303e-05" ixy="-2.119642e-06" ixz="-8.300722e-09" iyy="7.851777e-06" iyz="-7.605281e-08" izz="1.707018e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.094850 0.025500 -0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_pitch_left.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.094850 0.025500 -0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_pitch_left_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Hip_roll_right">
+    <inertial>
+      <origin xyz="0.012425 0.002929 0.005540" rpy="0 0 0" />
+      <mass value="0.085000" />
+      <inertia ixx="1.735369e-05" ixy="-7.941481e-06" ixz="-1.402494e-05" iyy="4.753006e-05" iyz="-3.305100e-06" izz="4.228129e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.030066 0.021479 0.018738" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_roll_right.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.030066 0.021479 0.018738" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_roll_right_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Hip_roll_left">
+    <inertial>
+      <origin xyz="0.012425 0.002929 -0.005540" rpy="0 0 0" />
+      <mass value="0.085000" />
+      <inertia ixx="1.735368e-05" ixy="-7.941484e-06" ixz="1.402494e-05" iyy="4.753005e-05" iyz="3.305101e-06" izz="4.228129e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.030066 0.021479 -0.018738" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_roll_left.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.030066 0.021479 -0.018738" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_roll_left_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Hip_yaw_right">
+    <inertial>
+      <origin xyz="0.002041 -0.008653 0.000095" rpy="0 0 0" />
+      <mass value="0.074000" />
+      <inertia ixx="3.076648e-05" ixy="5.563111e-06" ixz="-6.105386e-08" iyy="3.600765e-06" iyz="2.606968e-07" izz="3.266294e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.065500 -0.052151 0.000500" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_yaw_right.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.065500 -0.052151 0.000500" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_yaw_right_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Hip_yaw_left">
+    <inertial>
+      <origin xyz="0.002041 -0.008653 -0.000095" rpy="0 0 0" />
+      <mass value="0.074000" />
+      <inertia ixx="3.076648e-05" ixy="5.563109e-06" ixz="6.105370e-08" iyy="3.600764e-06" iyz="-2.606966e-07" izz="3.266294e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.065500 -0.052151 -0.000500" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_yaw_left.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.065500 -0.052151 -0.000500" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Hip_yaw_left_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Knee_right">
+    <inertial>
+      <origin xyz="0.005825 -0.014694 0.001220" rpy="0 0 0" />
+      <mass value="0.087000" />
+      <inertia ixx="6.530947e-05" ixy="1.654775e-05" ixz="-1.378720e-06" iyy="1.445804e-05" iyz="3.464037e-06" izz="7.648278e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.057350 0.025500 0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Knee_right.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.057350 0.025500 0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Knee_right_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Knee_left">
+    <inertial>
+      <origin xyz="0.005825 -0.014694 -0.001220" rpy="0 0 0" />
+      <mass value="0.087000" />
+      <inertia ixx="6.530947e-05" ixy="1.654775e-05" ixz="1.378720e-06" iyy="1.445804e-05" iyz="-3.464037e-06" izz="7.648278e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.057350 0.025500 -0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Knee_left.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.057350 0.025500 -0.000000" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Knee_left_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Ankle_right">
+    <inertial>
+      <origin xyz="-0.005655 0.004105 -0.003784" rpy="0 0 0" />
+      <mass value="0.082000" />
+      <inertia ixx="1.561750e-05" ixy="5.263977e-06" ixz="-5.615552e-06" iyy="1.932864e-05" iyz="3.891542e-06" izz="1.708737e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.094859 0.025691 -0.000059" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Ankle_right.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.094859 0.025691 -0.000059" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Ankle_right_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Ankle_left">
+    <inertial>
+      <origin xyz="-0.005655 0.004105 0.003784" rpy="0 0 0" />
+      <mass value="0.082000" />
+      <inertia ixx="1.561749e-05" ixy="5.263975e-06" ixz="5.615548e-06" iyy="1.932863e-05" iyz="-3.891538e-06" izz="1.708737e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.094859 0.025691 0.000059" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Ankle_left.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.094859 0.025691 0.000059" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Ankle_left_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Feet_right">
+    <inertial>
+      <origin xyz="-0.001502 -0.004389 0.000254" rpy="0 0 0" />
+      <mass value="0.074000" />
+      <inertia ixx="1.786618e-05" ixy="-2.317402e-06" ixz="9.970795e-07" iyy="1.446544e-05" iyz="1.388681e-06" izz="1.171043e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.085513 0.308434 -0.002458" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Feet_right.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.085513 0.308434 -0.002458" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Feet_right_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="Feet_left">
+    <inertial>
+      <origin xyz="-0.001502 -0.004389 -0.000254" rpy="0 0 0" />
+      <mass value="0.074000" />
+      <inertia ixx="1.786618e-05" ixy="-2.317402e-06" ixz="-9.970795e-07" iyy="1.446544e-05" iyz="-1.388681e-06" izz="1.171043e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.085513 0.308434 0.002458" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Feet_left.obj" scale="0.01 0.01 0.01" />
+      </geometry>
+      <material name="Steel" />
+    </visual>
+    <collision>
+      <origin xyz="-0.085513 0.308434 0.002458" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="package://K2/meshes/K2/Feet_left_collision.stl" scale="0.01 0.01 0.01" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="base_link_hip_pitch_right_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="Hip_pitch_right" />
+    <origin xyz="0.079600 -0.022600 -0.000000" rpy="-0.000000 -0.000000 0.000000" />
+    <axis xyz="1.000000 -0.000000 0.000000" />
+    <limit lower="-0.820305" upper="0.820305" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="base_link_hip_pitch_left_joint" type="revolute">
+    <parent link="base_link" />
+    <child link="Hip_pitch_left" />
+    <origin xyz="-0.023600 -0.022500 0.000000" rpy="-3.141593 0.000000 -3.141593" />
+    <axis xyz="-1.000000 0.000000 0.000000" />
+    <limit lower="-0.820305" upper="0.820305" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="hip_pitch_hip_roll_right_joint" type="revolute">
+    <parent link="Hip_pitch_right" />
+    <child link="Hip_roll_right" />
+    <origin xyz="0.015944 -0.029434 0.019072" rpy="3.141593 0.000000 -1.570796" />
+    <axis xyz="-0.000000 0.000000 -1.000000" />
+    <limit lower="-0.785398" upper="0.383972" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="hip_pitch_hip_roll_left_joint" type="revolute">
+    <parent link="Hip_pitch_left" />
+    <child link="Hip_roll_left" />
+    <origin xyz="0.015944 -0.029434 -0.019072" rpy="-3.141593 -0.000000 -1.570796" />
+    <axis xyz="0.000000 -0.000000 -1.000000" />
+    <limit lower="-0.383972" upper="0.785398" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="hip_roll_hip_yaw_right_joint" type="revolute">
+    <parent link="Hip_roll_right" />
+    <child link="Hip_yaw_right" />
+    <origin xyz="0.064534 -0.004021 0.018738" rpy="-0.000000 0.000000 1.570796" />
+    <axis xyz="-0.000000 -1.000000 -0.000000" />
+    <limit lower="-0.785398" upper="0.785398" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="hip_roll_hip_yaw_left_joint" type="revolute">
+    <parent link="Hip_roll_left" />
+    <child link="Hip_yaw_left" />
+    <origin xyz="0.064534 -0.004021 -0.018738" rpy="0.000000 -0.000000 1.570796" />
+    <axis xyz="0.000000 1.000000 -0.000000" />
+    <limit lower="-0.785398" upper="0.785398" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="hip_yaw_knee_right_joint" type="revolute">
+    <parent link="Hip_yaw_right" />
+    <child link="Knee_right" />
+    <origin xyz="0.029100 -0.068651 0.000500" rpy="-3.141593 -0.000000 -3.141593" />
+    <axis xyz="-1.000000 -0.000000 -0.000000" />
+    <limit lower="-1.919862" upper="0.000000" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="hip_yaw_knee_left_joint" type="revolute">
+    <parent link="Hip_yaw_left" />
+    <child link="Knee_left" />
+    <origin xyz="0.029100 -0.068651 -0.000500" rpy="3.141593 0.000000 -3.141593" />
+    <axis xyz="1.000000 0.000000 -0.000000" />
+    <limit lower="-1.919862" upper="0.000000" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="knee_ankle_pitch_right_joint" type="revolute">
+    <parent link="Knee_right" />
+    <child link="Ankle_right" />
+    <origin xyz="0.037500 -0.094922 -0.000000" rpy="-1.570796 -0.000000 -0.000000" />
+    <axis xyz="-1.000000 -0.000000 -0.000000" />
+    <limit lower="-0.523599" upper="0.523599" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="knee_ankle_pitch_left_joint" type="revolute">
+    <parent link="Knee_left" />
+    <child link="Ankle_left" />
+    <origin xyz="0.037500 -0.094922 0.000000" rpy="1.570796 0.000000 -0.000000" />
+    <axis xyz="1.000000 0.000000 -0.000000" />
+    <limit lower="-0.523599" upper="0.523599" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="anke_roll_ankle_pitch_right_joint" type="revolute">
+    <parent link="Ankle_right" />
+    <child link="Feet_right" />
+    <origin xyz="-0.009430 -0.002300 -0.028000" rpy="1.570796 0.000000 0.000000" />
+    <axis xyz="-0.000000 0.000000 1.000000" />
+    <limit lower="-0.349066" upper="0.872665" effort="2.94" velocity="4.712" />
+  </joint>
+  <joint name="anke_roll_ankle_pitch_left_joint" type="revolute">
+    <parent link="Ankle_left" />
+    <child link="Feet_left" />
+    <origin xyz="-0.009430 -0.002300 0.028000" rpy="-1.570796 -0.000000 0.000000" />
+    <axis xyz="0.000000 -0.000000 1.000000" />
+    <limit lower="-0.349066" upper="0.872665" effort="2.94" velocity="4.712" />
+  </joint>
+</robot>
