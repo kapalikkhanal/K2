@@ -28,10 +28,20 @@ from pathlib import Path
 
 import numpy as np
 
-# chip/site frame -> k2_root frame. root_x = -chip_y, root_y = chip_x, root_z = chip_z.
+# chip frame -> k2_root frame. root_x = -chip_y, root_y = chip_x, root_z = chip_z.
+# Validated by the gravity path: this is what makes projected_gravity read
+# [0, 0, -1] at a level stand, which the robot's stable crouch depends on.
 R_IMU_TO_ROOT = np.array([[0.0, -1.0, 0.0],
                           [1.0, 0.0, 0.0],
                           [0.0, 0.0, 1.0]])
+
+# MJCF `imu` site frame -> k2_root frame, read straight off the compiled model
+# (mjcf/k2_physics.xml, site quat "0 0 -0.707107 0.707107") and confirmed by
+# driving the free joint at a known angular velocity. This is NOT the same as
+# R_IMU_TO_ROOT, and the difference is the bug below.
+R_SITE_TO_ROOT = np.array([[0.0, -1.0, 0.0],
+                           [-1.0, 0.0, 0.0],
+                           [0.0, 0.0, -1.0]])
 LEVEL_CALIB_PATH = Path(__file__).with_name("imu_level_calibration.json")
 
 
@@ -79,11 +89,25 @@ class ImuAttitude:
         self.g_chip = None            # gravity estimate, chip frame
         self._deg2rad = np.pi / 180.0
         self.root_correction = _level_correction()
-        # The actor's gyro is in the nominal IMU/site frame. If the physical
-        # chip is mounted with a fixed tilt, rotate its gyro into that nominal
-        # frame as well as correcting projected gravity in the root frame.
+        # The actor's gyro observation is the gyro in the MJCF `imu` SITE frame
+        # -- that is what mjlab's imu_ang_vel sensor reports at training time.
+        # Take the chip gyro to the root frame (R_IMU_TO_ROOT, validated by the
+        # gravity path), apply the level correction there, then go back out to
+        # the site frame with R_SITE_TO_ROOT.T.
+        #
+        # This previously used R_IMU_TO_ROOT.T on the way back, i.e. it assumed
+        # the chip frame and the MJCF site frame were the same. They are not:
+        # R_SITE_TO_ROOT.T @ R_IMU_TO_ROOT = diag(-1, +1, -1), so the pitch-rate
+        # and yaw-rate channels reached the policy SIGN-INVERTED while roll was
+        # correct. Inverted rate feedback is anti-damping: invisible standing
+        # still (gyro ~ 0), divergent once marching. Measured on hardware
+        # 2026-07-28 by differentiating the gravity-derived angles -- pitch
+        # channel gain -1.00 (corr -1.00, n=144), roll channel +0.98 (n=43),
+        # no cross-axis leakage. The yaw channel is not observable from gravity
+        # and is corrected here by the same matrix, consistent with the ~60-90
+        # deg / 5 s yaw drift seen on the real robot.
         self.gyro_correction = (
-            R_IMU_TO_ROOT.T @ self.root_correction @ R_IMU_TO_ROOT
+            R_SITE_TO_ROOT.T @ self.root_correction @ R_IMU_TO_ROOT
         )
 
         # Capture and remove the gyro bias while the robot is still. The raw

@@ -6,7 +6,7 @@ not the IK stand pose, which centres the CoM and so is slightly bent. Motion is
 eased in over a few seconds and slew-limited, and torque is left ON at the end
 so the robot holds home. Ctrl-C releases torque.
 
-    python -m hardware.go_home --bus /dev/ttyACM0
+    python -m hardware.go_home --bus /dev/ttyAMA0
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ SLEW_RAD_S = 1.0   # gentle
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--bus", default="/dev/ttyACM0")
+    ap.add_argument("--bus", default="/dev/ttyAMA0")
     ap.add_argument("--ease", type=float, default=EASE_S)
     ap.add_argument("--hold", type=float, default=1e9,
                     help="seconds to keep holding home after arriving")

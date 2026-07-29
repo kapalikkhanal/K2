@@ -19,19 +19,13 @@ from . import k2_conventions as C
 # Solved with both feet planted, so this needs no IMU: the ground closes the
 # kinematic chain and the encoders alone determine the base pose.
 #
-# Robot_v4 (2026-07-21): the squat is now limited by the ANKLE PITCH, not the
-# knee. With the conservative symmetric +-30 deg ankle_pitch limit chosen for
-# early RL, the shin cannot lean far enough over a flat foot, so the feet-flat
-# squat binds at ~35 deg knee for only ~8 mm of base drop (v3 got ~90 mm with a
-# +-60 deg ankle). To restore a deep squat, widen ANKLE_PITCH_MAX in
-# scripts/phase1_mass.py (the v4 CAD clears +50 deg dorsiflexion) and re-run
-# phase1 -> phase2 -> C.write_joint_limits().
+# Keep the first hardware squat deliberately shallow. The current v4 MJCF has
+# enough ankle range for this 35 deg check without approaching a hard stop.
 MAX_KNEE_DEG = 35.0
 
-# Reachable base-height envelope (v4, +-30 deg ankle_pitch). Re-derive if the
-# ankle limit changes.
-MAX_BASE_H = 0.335    # standing
-MIN_BASE_H = 0.327    # deepest feet-flat squat at MAX_KNEE_DEG
+# Reachable base-link height envelope measured from the current v4 MJCF.
+MAX_BASE_H = 0.308    # feet-flat straight-knee solution
+MIN_BASE_H = 0.300    # feet-flat solution at MAX_KNEE_DEG
 
 
 def _model():
@@ -110,14 +104,47 @@ class SquatIK:
             self.data.subtree_com[0][0] - 0.5 * (xr + xl),   # CoM centred
         ]
 
-    def solve(self, knee_deg: float) -> tuple[np.ndarray, float]:
-        """Return (joint vector in SIM_ORDER, resulting base height)."""
+    def solve(self, knee_deg: float, base_shift_m: float = 0.0
+              ) -> tuple[np.ndarray, float]:
+        """Return (joint vector in SIM_ORDER, resulting base height).
+
+        ``base_shift_m`` moves base_link horizontally relative to the planted
+        feet after first finding the centered-CoM solution. Positive is
+        forward (+world X); negative is backward.
+        """
         from scipy.optimize import least_squares
 
         theta = np.radians(knee_deg)
         u0 = np.array([0.0, 0.0, 0.0, 0.0, 0.3368, 0.0])
         sol = least_squares(self._residual, u0, args=(theta,),
                             xtol=1e-12, ftol=1e-12)
+        if abs(base_shift_m) > 1e-9:
+            self._pose(theta, sol.x)
+            xr = self.data.site_xpos[self.sites["right_foot"]][0]
+            xl = self.data.site_xpos[self.sites["left_foot"]][0]
+            base_rel = (
+                self.data.xpos[self.bodies["base_link"]][0]
+                - 0.5 * (xr + xl)
+            )
+            target_base_rel = base_rel + float(base_shift_m)
+
+            def shifted_residual(u):
+                r = self._residual(u, theta)
+                self._pose(theta, u)
+                xr = self.data.site_xpos[self.sites["right_foot"]][0]
+                xl = self.data.site_xpos[self.sites["left_foot"]][0]
+                current = (
+                    self.data.xpos[self.bodies["base_link"]][0]
+                    - 0.5 * (xr + xl)
+                )
+                # Replace centered-CoM constraint with the requested exact
+                # base_link displacement. Sole and foot-alignment constraints
+                # remain unchanged.
+                r[-1] = current - target_base_rel
+                return r
+
+            sol = least_squares(shifted_residual, sol.x,
+                                xtol=1e-12, ftol=1e-12, gtol=1e-12)
         if max(abs(np.asarray(sol.fun))) > 1e-3:
             raise RuntimeError(
                 f"squat IK failed at {knee_deg} deg "

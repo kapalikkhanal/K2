@@ -6,3 +6,6 @@ logs/
 .codex/
 backup_v3*/
 wandb/
+*.csv
+*.bak
+policies/*.pt

@@ -40,33 +40,63 @@ SIM_ORDER = (
     "hip_pitch_L", "hip_roll_L", "hip_yaw_L", "knee_L", "ankle_pitch_L", "ankle_roll_L",
 )
 
-# Physical servo IDs, as set on the bus by the user (2026-07-21). A clean 0..11
-# chain with both ankle-roll servos at the extremes: start at the RIGHT foot
-# roll (0), up the right leg to the right hip (5), then down the left leg to the
-# LEFT foot roll (11). "R"/"L" are the robot's OWN right/left -- with the robot
-# facing you, its right foot is on your left.
+# Physical servo IDs -- CONFIRMED CORRECT on hardware 2026-07-28.
+#
+# Two transpositions were tried on the real robot that day and BOTH made it
+# worse, so do not "fix" this map again without a held-air check first:
+#   * hips  4/7 <-> 5/6 (pitch/roll)  -> worse
+#   * ankles 0/1 and 10/11 (pitch/roll) -> worse
+# Both had already been contradicted by check_joint_signs, where every joint
+# matched POS_DESC at +-10..17 deg.
+#
+# The map is a clean daisy-chain: right foot (0) up to the right hip (5),
+# across to the left hip (6), down to the left foot (11).
+#
+# CAUTION: these checks are all MIRROR-SYMMETRIC in wording ("outward",
+# "pigeon-toed", "toe up"), so they confirm each joint's AXIS and SIGN but are
+# blind to whether the "_R" servos are on the leg the MJCF calls right. See the
+# note on JOINT_TO_MJCF below -- the MJCF's `right_*` bodies sit at +y, which is
+# the robot's own LEFT.
+# LEGS SWAPPED 2026-07-28, proven on hardware. The MJCF's `_R` joints drive the
+# servos on the OTHER physical leg (IDs 6..11), and `_L` drives 0..5. Measured
+# back-to-back on the real robot with the same policy and the same 10 deg tilt
+# cutoff: unswapped safety-stopped at 11.4 deg after 10.5 s of marching, swapped
+# ran the full 15 s at 3.9 deg. The decisive number is not survival but gait
+# coherence -- the fraction of base roll locked to the 0.75 Hz gait clock went
+# 60% -> ~100% (amplitude 1.45 -> 2.57 deg at identical total roll), i.e. the
+# lateral weight shift now loads the leg that is actually planting.
+#
+# calibration.json's R/L entries were swapped by the SAME permutation, so every
+# servo keeps its own measured home_raw/sign (backup: calibration.json
+# .prelegswap.bak). Signs stay valid because every POS_DESC is mirror-symmetric
+# ("outward", "pigeon-toed", "toe up"), which is also precisely why none of the
+# held-air sign checks could ever have caught this.
+#
+# PREVIOUS (unswapped) MAP, if this ever needs reverting -- revert BOTH this and
+# calibration.json together:
+#   "ankle_roll_R": 0, "ankle_pitch_R": 1, "knee_R": 2, "hip_yaw_R": 3,
+#   "hip_roll_R": 4, "hip_pitch_R": 5, "hip_pitch_L": 6, "hip_roll_L": 7,
+#   "hip_yaw_L": 8, "knee_L": 9, "ankle_pitch_L": 10, "ankle_roll_L": 11
 JOINT_TO_ID = {
-    "ankle_roll_R": 0, "ankle_pitch_R": 1, "knee_R": 2, "hip_yaw_R": 3, "hip_roll_R": 4, "hip_pitch_R": 5,
-    "hip_pitch_L": 6, "hip_roll_L": 7, "hip_yaw_L": 8, "knee_L": 9, "ankle_pitch_L": 10, "ankle_roll_L": 11,
+    "ankle_roll_R": 11, "ankle_pitch_R": 10, "knee_R": 9, "hip_yaw_R": 8, "hip_roll_R": 7, "hip_pitch_R": 6,
+    "hip_pitch_L": 5, "hip_roll_L": 4, "hip_yaw_L": 3, "knee_L": 2, "ankle_pitch_L": 1, "ankle_roll_L": 0,
 }
 IDS = [JOINT_TO_ID[j] for j in SIM_ORDER]
 
-# Short joint name -> MJCF joint name. Note the ankle_roll joint carries
-# Fusion's odd auto-label "anke_roll_ankle_pitch..." (misspelled, and with
-# "pitch" in a roll joint's name); keep the exact spelling.
+# Short joint name -> exact Robot_v4 MJCF joint name.
 JOINT_TO_MJCF = {
     "hip_pitch_R": "base_link_hip_pitch_right_joint",
     "hip_roll_R": "hip_pitch_hip_roll_right_joint",
     "hip_yaw_R": "hip_roll_hip_yaw_right_joint",
     "knee_R": "hip_yaw_knee_right_joint",
     "ankle_pitch_R": "knee_ankle_pitch_right_joint",
-    "ankle_roll_R": "anke_roll_ankle_pitch_right_joint",
+    "ankle_roll_R": "ankle_roll_foot_right_joint",
     "hip_pitch_L": "base_link_hip_pitch_left_joint",
     "hip_roll_L": "hip_pitch_hip_roll_left_joint",
     "hip_yaw_L": "hip_roll_hip_yaw_left_joint",
     "knee_L": "hip_yaw_knee_left_joint",
     "ankle_pitch_L": "knee_ankle_pitch_left_joint",
-    "ankle_roll_L": "anke_roll_ankle_pitch_left_joint",
+    "ankle_roll_L": "ankle_roll_foot_left_joint",
 }
 MJCF_TO_JOINT = {v: k for k, v in JOINT_TO_MJCF.items()}
 
@@ -74,22 +104,21 @@ MJCF_TO_JOINT = {v: k for k, v in JOINT_TO_MJCF.items()}
 # operator can confirm each sign by eye. Each description names a motion that
 # is unambiguous from one viewing angle -- "leg rotates (yaw)" is not good
 # enough, because it reads the same in both directions.
-# ankle_pitch/ankle_roll descriptions were measured off the v4 MJCF: a +0.2 rad
-# nudge lifts the toe ~14 mm (pitch) and dips the outer sole edge ~3 mm more
-# than the inner (roll). Both feet move the same way for the same signed q.
+# Descriptions below were re-measured from the current Robot_v4 MJCF. They
+# describe the direction used by NUDGE_DIR, not the raw encoder direction.
 POS_DESC = {
-    "hip_pitch_R": "right foot swings FORWARD (toe ~63 mm forward)",
-    "hip_roll_R": "right foot swings INWARD, toward the left leg",
+    "hip_pitch_R": "right foot swings BACKWARD",
+    "hip_roll_R": "right foot swings OUTWARD, away from the left leg",
     "hip_yaw_R": "right TOE rotates INWARD (pigeon-toed)",
-    "knee_R": "right knee BENDS, heel lifts BACKWARD",
+    "knee_R": "right knee BENDS (heel rises relative to toe)",
     "ankle_pitch_R": "right TOE tilts UP (dorsiflex), heel drops",
-    "ankle_roll_R": "right foot's INNER edge (toward the left foot) DROPS, outer edge lifts",
-    "hip_pitch_L": "left foot swings BACKWARD (toe ~64 mm back)",
+    "ankle_roll_R": "right foot's OUTER edge LIFTS, inner edge (toward the left foot) DROPS",
+    "hip_pitch_L": "left foot swings BACKWARD",
     "hip_roll_L": "left foot swings OUTWARD, away from the right leg",
     "hip_yaw_L": "left TOE rotates INWARD (pigeon-toed)",
-    "knee_L": "left knee BENDS, heel lifts BACKWARD",
+    "knee_L": "left knee BENDS (heel rises relative to toe)",
     "ankle_pitch_L": "left TOE tilts UP (dorsiflex), heel drops",
-    "ankle_roll_L": "left foot's INNER edge (toward the right foot) DROPS, outer edge lifts",
+    "ankle_roll_L": "left foot's OUTER edge LIFTS, inner edge (toward the right foot) DROPS",
 }
 
 # Which way to nudge when checking a sign. BOTH knees are one-sided on v3/v4
@@ -112,7 +141,13 @@ def joint_limits() -> dict[str, tuple[float, float]]:
 
 
 def write_joint_limits(path: Path = LIMITS_PATH) -> None:
-    """Regenerate joint_limits.json from the MJCF (needs MuJoCo; run on the PC)."""
+    """Regenerate operational limits from the MJCF (needs MuJoCo).
+
+    The v4 knee mechanism physically permits 15 degrees past straight, but
+    locomotion must not command that hyperextended branch because it shifts the
+    torso forward. Preserve the CAD range in MJCF and cap the hardware/runtime
+    limit at 0 here.
+    """
     import mujoco
 
     model = mujoco.MjModel.from_xml_path(str(MJCF))
@@ -121,7 +156,10 @@ def write_joint_limits(path: Path = LIMITS_PATH) -> None:
         name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, j)
         if name in MJCF_TO_JOINT:
             lo, hi = model.jnt_range[j]
-            out[MJCF_TO_JOINT[name]] = [float(lo), float(hi)]
+            short = MJCF_TO_JOINT[name]
+            if short in ("knee_R", "knee_L"):
+                hi = min(float(hi), 0.0)
+            out[short] = [float(lo), float(hi)]
     with open(path, "w") as f:
         json.dump(out, f, indent=2)
 

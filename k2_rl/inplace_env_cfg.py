@@ -49,6 +49,8 @@ from k2_rl.k2_constants import (
   FOOT_BODIES,
   FOOT_GEOMS,
   FOOT_HEEL_SITES,
+  FOOT_INNER_SITES,
+  FOOT_OUTER_SITES,
   FOOT_SITES,
   FOOT_TOE_SITES,
   JOINT_PATTERNS,
@@ -58,8 +60,8 @@ from k2_rl.k2_constants import (
 from k2_rl.mdp import GaitCommandCfg
 from k2_rl.mdp import UniformVelocityCommandCfg
 
-# Height the base should hold (a hair below the settled crouch ~0.315 m).
-TARGET_BASE_HEIGHT = 0.31
+# Keep the reward target synchronized with the model-derived reset crouch.
+TARGET_BASE_HEIGHT = CROUCH_BASE_HEIGHT
 # Swing-foot lift target while marching. Higher = a cleaner, unambiguous lift
 # (foot fully clears the floor) so it can't skim forward into a walk.
 SWING_HEIGHT = 0.025  # 2.5 cm: clear lift without overloading the support leg
@@ -269,7 +271,7 @@ def make_k2_inplace_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         # free-joint carrier, whose zero inertia makes the mass matrix singular.
         "asset_cfg": SceneEntityCfg(
           "robot",
-          body_names=(r"base_link", r"Hip_.*", r"Knee_.*", r"Ankle_.*", r"Feet_.*"),
+          body_names=(r"base_link", r"hip_.*", r"Knee_.*", r"ankle_.*", r"Feet_.*"),
         ),
         "alpha_range": (-0.15, 0.15),  # ~+-15% mass, inertia scaled consistently
       },
@@ -356,7 +358,7 @@ def make_k2_inplace_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # heel, and toe independently, then penalize exact mesh contact below.
     "feet_center_clearance": RewardTermCfg(
       func=mdp.feet_lateral_clearance_l2,
-      weight=-3.0 if hardware_finetune else 0.0,
+      weight=-1.0,
       params={
         "minimum_separation": 0.060,
         "asset_cfg": SceneEntityCfg("robot", site_names=list(FOOT_SITES)),
@@ -364,7 +366,7 @@ def make_k2_inplace_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     ),
     "feet_heel_clearance": RewardTermCfg(
       func=mdp.feet_lateral_clearance_l2,
-      weight=-6.0 if hardware_finetune else 0.0,
+      weight=-2.0,
       params={
         "minimum_separation": 0.060,
         "asset_cfg": SceneEntityCfg("robot", site_names=list(FOOT_HEEL_SITES)),
@@ -372,15 +374,25 @@ def make_k2_inplace_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     ),
     "feet_toe_clearance": RewardTermCfg(
       func=mdp.feet_lateral_clearance_l2,
-      weight=-6.0 if hardware_finetune else 0.0,
+      weight=-2.0,
       params={
         "minimum_separation": 0.060,
         "asset_cfg": SceneEntityCfg("robot", site_names=list(FOOT_TOE_SITES)),
       },
     ),
+    "feet_inner_clearance": RewardTermCfg(
+      func=mdp.feet_lateral_clearance_l2,
+      weight=-4.0,
+      params={
+        "minimum_separation": 0.012,
+        "asset_cfg": SceneEntityCfg(
+          "robot", site_names=list(FOOT_INNER_SITES)
+        ),
+      },
+    ),
     "feet_self_collision": RewardTermCfg(
       func=mdp.self_collision_cost,
-      weight=-4.0 if hardware_finetune else 0.0,
+      weight=-6.0,
       params={"sensor_name": "feet_self_contact"},
     ),
     # Clean vertical marching: feet only move up/down, never skim forward.
@@ -440,7 +452,23 @@ def make_k2_inplace_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         "sensor_name": "feet_ground_contact",
         "command_name": "gait",
         "target_height": SWING_HEIGHT,
-        "asset_cfg": SceneEntityCfg("robot", site_names=list(FOOT_SITES)),
+        "center_cfg": SceneEntityCfg("robot", site_names=list(FOOT_SITES)),
+        "heel_cfg": SceneEntityCfg("robot", site_names=list(FOOT_HEEL_SITES)),
+        "toe_cfg": SceneEntityCfg("robot", site_names=list(FOOT_TOE_SITES)),
+        "inner_cfg": SceneEntityCfg("robot", site_names=list(FOOT_INNER_SITES)),
+        "outer_cfg": SceneEntityCfg("robot", site_names=list(FOOT_OUTER_SITES)),
+      },
+    ),
+    "swing_sole_flat": RewardTermCfg(
+      func=mdp.swing_sole_height_spread_l2,
+      weight=-0.25,
+      params={
+        "command_name": "gait",
+        "heel_cfg": SceneEntityCfg("robot", site_names=list(FOOT_HEEL_SITES)),
+        "toe_cfg": SceneEntityCfg("robot", site_names=list(FOOT_TOE_SITES)),
+        "inner_cfg": SceneEntityCfg("robot", site_names=list(FOOT_INNER_SITES)),
+        "outer_cfg": SceneEntityCfg("robot", site_names=list(FOOT_OUTER_SITES)),
+        "tolerance": 0.005,
       },
     ),
     # Hold: keep both feet planted (holding envs only).

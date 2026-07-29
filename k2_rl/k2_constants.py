@@ -16,12 +16,10 @@ Key facts baked in here (see ``robot.md`` / the k2-twin memory):
     = 1, every other geom = 0), so no CollisionCfg override is needed.
 
 FUSION NAMING GOTCHA (critical for every regex in the task):
-  Fusion names each joint ``<parent>_<child>_<side>_joint``, so substrings
+  Fusion names most joints ``<parent>_<child>_<side>_joint``, so substrings
   collide -- e.g. ``hip_pitch`` appears in BOTH ``base_link_hip_pitch_..._joint``
-  and ``hip_pitch_hip_roll_..._joint``; ``ankle_pitch`` appears in both the
-  pitch joint and the (misspelled) roll joint ``anke_roll_ankle_pitch_...``.
-  Always anchor on the parent token. The unique per-DOF patterns live in
-  ``JOINT_PATTERNS`` below -- use them everywhere.
+  and ``hip_pitch_hip_roll_..._joint``. Always use the unique per-DOF patterns
+  below instead of unanchored substring matches.
 """
 
 from __future__ import annotations
@@ -64,7 +62,7 @@ JOINT_PATTERNS: dict[str, str] = {
   "hip_yaw": r"hip_roll_hip_yaw_(left|right)_joint",
   "knee": r"hip_yaw_knee_(left|right)_joint",
   "ankle_pitch": r"knee_ankle_pitch_(left|right)_joint",
-  "ankle_roll": r"anke_roll_ankle_pitch_(left|right)_joint",
+  "ankle_roll": r"ankle_roll_foot_(left|right)_joint",
 }
 
 # Body names of the two feet (carry the sole collision + foot sites).
@@ -72,6 +70,8 @@ FOOT_BODIES: tuple[str, str] = ("Feet_left", "Feet_right")
 FOOT_SITES: tuple[str, str] = ("left_foot", "right_foot")
 FOOT_HEEL_SITES: tuple[str, str] = ("left_foot_heel", "right_foot_heel")
 FOOT_TOE_SITES: tuple[str, str] = ("left_foot_toe", "right_foot_toe")
+FOOT_INNER_SITES: tuple[str, str] = ("left_foot_inner", "right_foot_inner")
+FOOT_OUTER_SITES: tuple[str, str] = ("left_foot_outer", "right_foot_outer")
 FOOT_GEOMS: tuple[str, str] = ("left_foot_collision", "right_foot_collision")
 
 ##
@@ -95,23 +95,23 @@ K2_ACTUATOR = BuiltinPositionActuatorCfg(
 # Default crouch keyframe.
 ##
 
-# Symmetric standing crouch (MJCF joint coordinates; sim uses identity
-# calibration so these equal the hardware `q` convention). Derived from the
-# validated hardware crouch_pose.json, symmetrized L/R and pulled a few degrees
-# off the ankle_pitch limit. Base z is solved so the soles rest on the floor
-# (see validate_pose.py; recomputed there and pinned here).
+# Flat-foot standing crouch solved from calibrated home (q=0) against the v4
+# MJCF. SquatIK constrains both soles to the floor and aligns the feet
+# fore/aft. The base is shifted 10 mm backward from the centered-CoM solution
+# per the hardware test; the resulting CoM remains inside the support polygon.
 _CROUCH_JOINTS: dict[str, float] = {
-  JOINT_PATTERNS["hip_pitch"]: -0.40,
+  r"base_link_hip_pitch_right_joint": -0.14899887144565582,
+  r"base_link_hip_pitch_left_joint": -0.15286967158317566,
   JOINT_PATTERNS["hip_roll"]: 0.0,
   JOINT_PATTERNS["hip_yaw"]: 0.0,
-  JOINT_PATTERNS["knee"]: -0.85,
-  JOINT_PATTERNS["ankle_pitch"]: 0.45,
+  JOINT_PATTERNS["knee"]: -0.6108652353286743,
+  r"knee_ankle_pitch_right_joint": 0.4616725742816925,
+  r"knee_ankle_pitch_left_joint": 0.4581871032714844,
   JOINT_PATTERNS["ankle_roll"]: 0.0,
 }
 
-# Base height (m) of k2_root at the crouch. Pinned from validate_pose.py so the
-# feet start flat on the ground with a hair of clearance.
-CROUCH_BASE_HEIGHT = 0.318
+# Solved k2_root height with the sole collision meshes on the floor.
+CROUCH_BASE_HEIGHT = 0.3005640236873287
 
 CROUCH_KEYFRAME = EntityCfg.InitialStateCfg(
   pos=(0.0, 0.0, CROUCH_BASE_HEIGHT),

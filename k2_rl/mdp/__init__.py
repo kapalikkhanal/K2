@@ -27,4 +27,5 @@ from k2_rl.mdp.rewards import (  # noqa: F401
   feet_xy_vel_l2,
   gait_contact,
   gait_swing,
+  swing_sole_height_spread_l2,
 )

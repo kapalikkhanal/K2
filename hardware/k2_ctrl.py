@@ -2,7 +2,7 @@
 """K2 controller. Same code drives MuJoCo or the real servo chain.
 
     python -m hardware.k2_ctrl --bus sim --motion squat --viewer
-    python -m hardware.k2_ctrl --bus /dev/ttyACM0 --motion squat
+    python -m hardware.k2_ctrl --bus /dev/ttyAMA0 --motion squat
 
 The only thing --bus changes is which object implements the count-level servo
 interface. Observation building, calibration, clamping, slew limiting and the
@@ -62,8 +62,22 @@ def _calibration(bus):
     return calib
 
 
+def _write_log(log, rows, stabilizer):
+    """Persist collected telemetry, including data preceding a safety stop."""
+    if log is None or not rows:
+        return
+    header = "t," + ",".join(f"cmd_{j}" for j in C.SIM_ORDER) + "," \
+             + ",".join(f"q_{j}" for j in C.SIM_ORDER) + "," \
+             + ",".join(f"qd_{j}" for j in C.SIM_ORDER)
+    if stabilizer is not None:
+        header += (",imu_roll,imu_pitch,imu_roll_rate,imu_pitch_rate,"
+                   "feedback_roll,feedback_pitch")
+    np.savetxt(log, np.array(rows), delimiter=",", header=header, comments="")
+    print(f"wrote {log}")
+
+
 def run(bus, traj, heights, dt, verbose=True, log=None,
-        attitude=None, stabilizer=None):
+        attitude=None, stabilizer=None, approach_s=APPROACH_S):
     """Play a joint trajectory, closing the loop through the bus each tick."""
     calib = _calibration(bus)
 
@@ -72,7 +86,7 @@ def run(bus, traj, heights, dt, verbose=True, log=None,
 
     # Ease from wherever the robot actually is into the first pose, so nothing
     # snaps when torque comes on.
-    n_appr = int(APPROACH_S / dt)
+    n_appr = int(float(approach_s) / dt)
     approach = np.stack([q_now + (traj[0] - q_now) * (0.5 * (1 - np.cos(np.pi * i / n_appr)))
                          for i in range(n_appr)])
 
@@ -95,8 +109,14 @@ def run(bus, traj, heights, dt, verbose=True, log=None,
                 # Fade feedback in over one second instead of stepping the
                 # servos when the complementary filter first initializes.
                 gain_scale = min(1.0, (feedback_ticks + 1) * dt)
-                target = stabilizer.update(
-                    target, gyro, gravity, dt, gain_scale=gain_scale)
+                try:
+                    target = stabilizer.update(
+                        target, gyro, gravity, dt, gain_scale=gain_scale)
+                except BaseException:
+                    # UnsafeTiltError is raised before the current tick can be
+                    # appended. Preserve every completed sample for diagnosis.
+                    _write_log(log, rows, stabilizer)
+                    raise
                 feedback_ticks += 1
 
             cmd = slew(cmd, target, dt)
@@ -139,22 +159,14 @@ def run(bus, traj, heights, dt, verbose=True, log=None,
     if elapsed > n_ticks * dt * 1.05:
         print("  NOTE: the loop could not hold the target rate")
 
-    if log is not None and rows:
-        header = "t," + ",".join(f"cmd_{j}" for j in C.SIM_ORDER) + "," \
-                 + ",".join(f"q_{j}" for j in C.SIM_ORDER) + "," \
-                 + ",".join(f"qd_{j}" for j in C.SIM_ORDER)
-        if stabilizer is not None:
-            header += (",imu_roll,imu_pitch,imu_roll_rate,imu_pitch_rate,"
-                       "feedback_roll,feedback_pitch")
-        np.savetxt(log, np.array(rows), delimiter=",", header=header, comments="")
-        print(f"wrote {log}")
+    _write_log(log, rows, stabilizer)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--bus", default="sim",
-                    help="'sim' for MuJoCo, or a device path like /dev/ttyACM0")
+                    help="'sim' for MuJoCo, or a device path like /dev/ttyAMA0")
     ap.add_argument("--motion", default="squat", choices=("squat", "hold"))
     ap.add_argument("--depth", type=float, default=30.0,
                     help=f"squat depth in knee degrees (max {k2_motion.MAX_KNEE_DEG:.0f})")

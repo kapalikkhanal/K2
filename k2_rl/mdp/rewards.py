@@ -58,15 +58,19 @@ def gait_swing(
   sensor_name: str,
   command_name: str,
   target_height: float,
-  asset_cfg: SceneEntityCfg,
+  center_cfg: SceneEntityCfg,
+  heel_cfg: SceneEntityCfg,
+  toe_cfg: SceneEntityCfg,
+  inner_cfg: SceneEntityCfg,
+  outer_cfg: SceneEntityCfg,
 ) -> torch.Tensor:
-  """Track a smooth alternating foot-height trajectory while marching.
+  """Track the same swing height at five points across each sole.
 
-  Unlike the former one-sided lift reward, this also rewards returning the
-  foot to the floor and prevents a policy from earning reward by holding one
-  foot high. A small phase dead-zone creates double support.
+  Center-only tracking allowed the policy to lift a tilted foot. Requiring the
+  center, heel, toe, inner edge, and outer edge to follow one vertical target
+  makes pitch and roll tilt lose reward while still allowing a smooth lift.
   """
-  asset: Entity = env.scene[asset_cfg.name]
+  asset: Entity = env.scene[center_cfg.name]
   command = env.command_manager.get_command(command_name)
   march = command[:, 0]
   sinp = command[:, 1]
@@ -80,11 +84,55 @@ def gait_swing(
     ],
     dim=1,
   )
-  foot_z = asset.data.site_pos_w[:, asset_cfg.site_ids, 2]  # [B, 2]
+  foot_z = torch.stack(
+    [
+      asset.data.site_pos_w[:, center_cfg.site_ids, 2],
+      asset.data.site_pos_w[:, heel_cfg.site_ids, 2],
+      asset.data.site_pos_w[:, toe_cfg.site_ids, 2],
+      asset.data.site_pos_w[:, inner_cfg.site_ids, 2],
+      asset.data.site_pos_w[:, outer_cfg.site_ids, 2],
+    ],
+    dim=1,
+  )  # [B, 5 sole points, 2 feet]
   # 8 mm sigma is tight enough to make a clear 25 mm step without demanding
   # high-frequency corrections from the loaded STS3215 servos.
-  tracking = torch.exp(-torch.square(foot_z - target) / (0.008**2))
-  return torch.mean(tracking, dim=1) * march
+  tracking = torch.exp(
+    -torch.square(foot_z - target[:, None, :]) / (0.008**2)
+  )
+  return torch.mean(tracking, dim=(1, 2)) * march
+
+
+def swing_sole_height_spread_l2(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  heel_cfg: SceneEntityCfg,
+  toe_cfg: SceneEntityCfg,
+  inner_cfg: SceneEntityCfg,
+  outer_cfg: SceneEntityCfg,
+  tolerance: float = 0.005,
+) -> torch.Tensor:
+  """Normalized height spread across the four swing-sole extremities.
+
+  Zero means the complete sole is level. A 5 mm heel/toe or inner/outer
+  difference costs one before weighting. Only the commanded swing foot is
+  penalized, leaving the planted foot governed by contact and slip terms.
+  """
+  asset: Entity = env.scene[heel_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  march, sinp = command[:, 0], command[:, 1]
+  swing = torch.stack([(sinp > 0).float(), (sinp < 0).float()], dim=1)
+  z = torch.stack(
+    [
+      asset.data.site_pos_w[:, heel_cfg.site_ids, 2],
+      asset.data.site_pos_w[:, toe_cfg.site_ids, 2],
+      asset.data.site_pos_w[:, inner_cfg.site_ids, 2],
+      asset.data.site_pos_w[:, outer_cfg.site_ids, 2],
+    ],
+    dim=1,
+  )
+  spread = torch.amax(z, dim=1) - torch.amin(z, dim=1)
+  cost = torch.sum(torch.square(spread / tolerance) * swing, dim=1)
+  return cost * march
 
 
 def base_ang_vel_xy_l2(

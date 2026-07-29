@@ -1,8 +1,8 @@
 # K2 — 12-DOF Biped Robot: Complete Reference
 
-A self-contained knowledge dump for the K2 walking robot: the hardware, the
-digital twin, the software stack, the calibration, the IK walk, and the road to
-RL. Written so another engineer or LLM can pick up with full context.
+A self-contained knowledge dump for the K2 biped: the hardware, the
+digital twin, the software stack, the calibration, the RL task, and how to
+deploy it. Written so another engineer or LLM can pick up with full context.
 
 Repo root: `~/K2`. Intended to be **open-sourced**, so keep it clean — only
 files that are strictly needed.
@@ -17,7 +17,7 @@ designed in Fusion 360 (current export: **Robot_v4**, 2026-07) and is developed
 touches hardware, and the *same control code* drives sim or the real robot by
 changing one flag.
 
-- **Total mass:** ~1056 g
+- **Total mass:** ~1179 g (modeled 1.1786 kg)
 - **Standing hip height:** ~364 mm; standing base-link height ~335 mm; CoM ~194 mm
 - **Nominal stance width:** feet at ±55–58 mm (≈110–116 mm apart)
 - **Controller:** Raspberry Pi 5 (see §9)
@@ -48,7 +48,7 @@ including the misspelled "anke" and the word "pitch" inside the *roll* joint):
 | hip_yaw_R/L | `hip_roll_hip_yaw_{right,left}_joint` | yaw (world Z) | ±45 |
 | knee_R/L | `hip_yaw_knee_{right,left}_joint` | pitch (world Y) | **[−110, 0] both** |
 | ankle_pitch_R/L | `knee_ankle_pitch_{right,left}_joint` | pitch (world Y) | ±30 |
-| ankle_roll_R/L | `anke_roll_ankle_pitch_{right,left}_joint` | roll (world X) | **[−20, +50]** |
+| ankle_roll_R/L | `ankle_roll_foot_{right,left}_joint` | roll (world X) | **[−20, +40]** |
 
 Key sign/limit facts (learned the hard way):
 - **Both knees flex NEGATIVE** on v3/v4 (both ranges `[−110°, 0]`). The Fusion
@@ -82,11 +82,27 @@ Key sign/limit facts (learned the hard way):
 - **Port gotcha:** `/dev/ttyACM0` resets to non-writable on every replug.
   Fix each time: `sudo chmod 666 /dev/ttyACM0` (or add user to `dialout`).
 
-### Servo ID map (set 2026-07-21) — clean 0..11 chain, both ankle-rolls at the ends
-Right leg: `ankle_roll 0, ankle_pitch 1, knee 2, hip_yaw 3, hip_roll 4, hip_pitch 5`.
-Left leg: `hip_pitch 6, hip_roll 7, hip_yaw 8, knee 9, ankle_pitch 10, ankle_roll 11`.
-R/L = the robot's **own** right/left (robot facing you → its right foot is on your
-left). **ID 0 is valid** and works through the SDK. The map lives in
+### Servo ID map — chain 0..11, both ankle-rolls at the ends
+Physical chain: right foot (0) up to the right hip (5), across to the left hip
+(6), down to the left foot (11).
+
+**The MJCF's `_R` joints drive servos 6..11 and `_L` drives 0..5.** This is not a
+typo: the MJCF bodies named `*_right` sit at +y, which is the robot's **own
+LEFT** (Fusion names them from the viewer's side), so the model's "right leg" is
+the physical left leg. Proven on hardware — with the legs mapped straight through,
+the march safety-stopped at 11.4 deg after 10.5 s; mapped as below it ran the full
+15 s at 3.9 deg, and the fraction of base roll locked to the gait clock went from
+60% to ~100%.
+
+`calibration.json` is permuted by the same swap, so every servo keeps its own
+measured `home_raw`/`sign`. **Revert both together or neither.**
+
+None of the held-air sign checks can catch a leg swap: every `POS_DESC` string is
+mirror-symmetric ("outward", "pigeon-toed", "toe up"), so all 12 joints pass on
+either leg, and a symmetric crouch is invariant under mirroring. It only shows up
+once the gait has to pick a leg to shift weight onto.
+
+**ID 0 is valid** and works through the SDK. The map lives in
 `k2_conventions.JOINT_TO_ID` — the single source of truth; everything reads it.
 Assign/renumber with `python -m hardware.set_servo_id --scan | --from N --to M`
 (one servo at a time).
@@ -108,10 +124,10 @@ raw = home_raw + sign * q * 4096/2π
 - `sign` = ±1, the direction the joint moves for +q. Stored in
   `hardware/calibration.json`. Sim uses an identity calibration by construction,
   so miscalibration can only ever come from hardware.
-- **Verified signs (on hardware):** hip_pitch R−1/L+1, hip_roll **R+1/L+1**,
-  hip_yaw R−1/L+1, knee R−1/L+1, ankle_pitch R−1/L+1, ankle_roll R−1/L+1.
-  Most pairs are **mirror-opposite** (mirror-mounted servos); hip_roll is the one
-  same-sign pair — confirmed correct on hardware.
+- `sign` = ±1, the direction the joint moves for +q. All 12 were re-verified on
+  hardware with `check_joint_signs.py` (hips, knees and all four ankles, both
+  directions). After the leg swap the entries read +1 for every `_R` joint and −1
+  for every `_L` joint, because each servo kept the sign measured on it.
 
 ### How to (re)calibrate — `python -m hardware.k2_calibrate` (GUI, needs DISPLAY)
 1. LIMP (torque off), hand-pose the robot dead straight with **both feet flat**.
@@ -194,84 +210,89 @@ Core modules:
 - **`k2_calibrate.py`** — 12-servo calibration GUI (see §4).
 - **`k2_motion.py`** — `SquatIK`, a flat-foot double-support squat solved against
   the MJCF (needs no IMU: both planted feet close the chain).
-- **`k2_walk_ik.py`** — the **IK walk** (see §7).
-- **`test_swing.py`** — single-step / one-foot-balance test: eases into the
-  default crouch, waits for `go`, shifts onto the stance foot + lifts the swing
-  foot, returns to the crouch and holds it. Great for isolating balance.
-- **`test_crouch.py`** — crouch + gentle lateral sway (both feet planted).
-- **`k2_kinematics.py`** — pure-numpy forward kinematics (`k2_kinematics.npz`
-  baked from the MJCF) so the Pi computes base height with no MuJoCo.
+- **`k2_policy_run.py`** — runs a trained ONNX policy over the `Bus`, sim or
+  real, one code path. Rebuilds the 45-D observation byte-for-byte the way the
+  mjlab env built it at training time, reads joint order / default pose / action
+  scale from the ONNX metadata, and clamps targets to the joint limits.
+- **`k2_attitude.py`** — `SimAttitude` (MuJoCo ground truth) and `ImuAttitude`
+  (LSM6DS3 + adaptive complementary filter), one interface. Returns
+  `(gyro, projected_gravity)`. **The gyro is returned in the MJCF `imu` SITE
+  frame**, not the chip frame — see §9.
+- **`k2_stabilizer.py`** — `UnsafeTiltError` and bounded tilt feedback.
+- **`test_default_crouch.py`** — eases into the model-derived default crouch and
+  holds it, with an IMU tilt cutoff. The first thing to run after calibrating.
+- **`check_joint_signs.py`** — verifies any subset of the 12 calibration signs,
+  both directions, held in air. Supersedes the old per-group scripts.
+- **`capture_home.py`** — snapshots the pose the robot is standing in right now
+  into `calibration.json` `home_raw`, working purely in raw counts.
 - **`go_home.py`**, **`set_servo_gain.py`**, **`set_servo_id.py`**,
-  **`check_lateral_signs.py`**, **`k2_sway.py`** (one-foot reach test),
-  **`k2_attitude.py`** + **`calibrate_imu_level.py`** (IMU).
+  **`calibrate_imu_level.py`** (IMU mounting-tilt calibration).
 
 Config files (checked in): `calibration.json`, `joint_limits.json`,
-`crouch_pose.json` (the default crouch), `k2_kinematics.npz`,
-`imu_level_calibration.json`.
+`crouch_pose.json` (the default crouch), `imu_level_calibration.json`.
 
 ---
 
-## 7. The IK walk (quasi-static, **no RL**)
+## 7. Deploying a trained policy
 
-`hardware/k2_walk_ik.py`. A statically-stable test gait with bounded LSM6DS3
-roll/pitch feedback — only possible because the v4 ankle roll makes single-foot
-support statically stable.
+`hardware/k2_policy_run.py` runs the ONNX over the same `Bus`, so the twin and
+the robot execute identical code.
 
-- **`WalkIK`** — whole-body inverse kinematics. Given each foot's target
-  (x, y, height = 0 planted / >0 lifted-and-level) and a CoM target (x, y), it
-  solves the base pose + 12 joints with the feet held flat, **torso level**
-  (base roll/pitch removed as unknowns). The lateral shift is taken up by
-  hip_roll + ankle_roll. `base_roll` adds a fixed lateral **trim** (see below).
-- **`build_walk()`** — one repeatable step cycle: shift CoM over the stance foot
-  → lift & swing the other foot forward → set down → shift across → repeat. Solves
-  IK per tick (warm-started; reseed-free — the current defaults converge cleanly),
-  and validates the CoM stays inside the support polygon (`--check`).
-- The joint path is C2-smoothed and time-scaled before playback (default limits
-  0.8 rad/s and 25 rad/s²), removing the high-speed swing-leg changes that
-  produced a visible jerk on hardware.
-- On hardware, `TiltStabilizer` is enabled by default. It estimates torso roll
-  and pitch from `ImuAttitude`, applies bounded PD feedback through IK-derived
-  coordinated hip/ankle responses, and releases torque above 12° tilt.
-- Played through `k2_ctrl.run` (same slew/torque-safe loop).
-
-**Current tuned defaults** (stance widened to leverage the 20° ankle):
-step 2.5 cm, lift 2.5 cm, **com_shift 39 mm**, **stance_y 55 mm**, level torso,
-4 s/step before automatic time-scaling. → statically stable in sim (thin
-margin), foot clearance ~62 mm during swing (no self-collision).
-
-```
-python -m hardware.k2_walk_ik --bus sim --viewer   # preview
-python -m hardware.k2_walk_ik --check              # stability numbers only
-python -m hardware.k2_walk_ik --bus /dev/ttyACM0   # real + IMU feedback; prompts 'go'
+```bash
+# twin
+python -m hardware.k2_policy_run --bus sim --viewer --mode march \
+  --policy policies/march_hold_v4_1999.onnx
+# real
+python -m hardware.k2_policy_run --bus /dev/ttyAMA0 --mode march \
+  --march-after 5 --duration 20 --slew 1.0 --fall-angle 10 \
+  --policy policies/march_hold_v4_1999.onnx --log run.csv
 ```
 
-**The `base_roll` trim:** `--base-roll DEG` changes the feedback target and the
-nominal IK torso roll. Its default is now zero; only add a small fixed trim after
-level-calibrating the IMU and observing a consistent one-sided bias.
+The 45-D observation is rebuilt exactly as the mjlab env built it:
 
-**Known real-vs-sim gaps / lessons on the walk:**
-- Thin static margin (~1–3 mm) still means the real robot needs spotting. The
-  IMU can reject torso angular error, but it cannot measure foot contact or CoM
-  position and cannot recover once the CoM has left the support polygon.
-- Feet self-collided during swing at a narrow (48 mm) stance because the ankle
-  was limited to 12° inward; **widening to 55 mm** (with the 20° ankle) fixed it.
-- Warm-start IK can "poison" later ticks if one fails; the leg-switch jerk came
-  from a discontinuous CoM-x target (ease CoM onto the stance foot *during* the
-  shift, not at swing start).
+```
+[ base_ang_vel(3)      gyro, MJCF imu SITE frame
+  projected_gravity(3) gravity direction, k2_root frame
+  joint_pos_rel(12)    q - default_pose, SIM_ORDER
+  joint_vel_rel(12)    qdot, SIM_ORDER
+  last_action(12)      previous RAW policy output
+  gait(3) ]            [march, march*sin(phase), march*cos(phase)]
+```
+
+Targets are `default_pose + action_scale * action`, clamped to the joint limits
+and to counts [40, 4055]. Joint order, default pose, action scale and gait
+frequency all come from the ONNX metadata, so a retrain cannot silently break
+the deploy path.
+
+**Safety:** torque is released on every exit path including Ctrl-C; `--slew`
+caps per-tick joint motion; `--fall-angle` cuts torque above a torso tilt; the
+robot is eased into the default crouch over `--approach` seconds before the
+policy takes over, with the tilt cutoff already armed.
+
+`--log` writes a 50 Hz CSV of commanded vs measured position for all 12 joints
+plus gyro, gravity, tilt and raw actions. **This log is the single most useful
+debugging artifact** — a mis-mapped joint tracks its command perfectly while the
+IMU response is orthogonal to what that command should produce.
 
 ---
 
-## 8. Where the real robot currently stands (as of 2026-07-22)
+## 8. Where the real robot currently stands
 
-- All 12 servos calibrated; home re-captured from a truly-straight pose (an
-  earlier home had hip_yaw_R ~7° and knee_L ~5.5° off, which caused a persistent
-  left lean). Signs all verified on hardware (§4).
-- `test_crouch` / `test_swing` work; right-stance weight-shift confirmed good.
-- The IK walk runs on hardware but is **open-loop and marginal** — it steps but
-  wobbles/tilts and needs spotting. Tuning knobs: `--base-roll` (trim),
-  `--com-shift`, `--stance-y`, `--t-step` (slower), `--lift`.
-- A small residual left tilt is being trimmed out with `base_roll` + a per-joint
-  ankle_roll_L home offset (~+4°).
+- All 12 servos calibrated; all 12 signs verified on hardware with
+  `check_joint_signs.py`, both directions.
+- IMU mounting tilt calibrated (`calibrate_imu_level.py`); the gyro frame bug in
+  §9 is fixed.
+- **Legs are mapped swapped** between model and hardware (§3) — required, proven
+  by back-to-back logged runs.
+- **Hold is solid.** Rock-steady, ~1.7 deg tilt, no drift.
+- **March runs** but with limited headroom: a good run peaks near 8.6 deg tilt
+  against a 12 deg cutoff. Roll is a geometric budget — half-stance ~34 mm with
+  the CoM ~200 mm up means a full quasi-static weight shift needs ~10 deg of
+  lean. Lower the CoM, narrow the stance, or raise the cadence; reward weights
+  will not buy margin that the geometry does not have.
+- **Open defect:** the left foot's `heel`, `inner` and `outer` sole sites are not
+  mirrors of the right foot's, which skews four reward terms against the left
+  leg. Needs the sites corrected and a retrain.
 
 ---
 
@@ -282,36 +303,57 @@ Benchmarked the policy MLP at **0.012 ms/inference** on a single Pi 5 CPU thread
 is lighter/lower-power (better on `base_link`) and its I2C/SPI eases the IMU. A
 Jetson would only be justified if cameras / a VLA are added later.
 
-IMU on the Pi: **LSM6DS3**, mounted flat on `base_link`. In the MJCF the IMU site
-frame matches the physical chip so gyro/accel come out un-permuted; resting accel
-reads +9.81 on IMU Z. `k2_attitude.py` filters gravity + de-biases the gyro and
-rotates into the root frame for a walking policy's observation.
+IMU on the Pi: **LSM6DS3**, inside the electronics tray.
+
+**The chip frame is NOT the MJCF `imu` site frame** — this cost a full debugging
+session. The policy's `base_ang_vel` observation is the gyro in the *site* frame;
+`ImuAttitude` used to return it in the *chip* frame, and the two differ by
+`diag(-1, +1, -1)`. That delivered the **pitch and yaw rate channels
+sign-inverted** while roll was correct. Inverted rate feedback is anti-damping:
+invisible standing still (gyro ~ 0) and divergent once the robot moves, which is
+why hold was flawless while march destroyed itself. It also explains the
+long-standing ~5x pitch amplification and 60-90 deg yaw drift.
+
+`k2_attitude.py` now maps chip -> root (`R_IMU_TO_ROOT`, validated by the gravity
+path) -> site (`R_SITE_TO_ROOT.T`, read off the compiled MJCF).
+
+**How to test an IMU frame:** never with absolute left/right — +y is the robot's
+own left while the MJCF calls those bodies `*_right`. Use the convention-free
+invariant instead: for any tilt in any direction, integrated `obs[0]` / delta-pitch
+and integrated `obs[1]` / delta-roll must both equal **+1**. Yaw has no gravity
+reference, so phrase it as clockwise / counter-clockwise **seen from above**.
 
 ---
 
-## 10. The road to a robust walk: RL
+## 10. The RL task — `k2_rl/`
 
-The open-loop IK walk proves the **hardware and kinematics can do it** (shift
-weight, balance on one foot, lift, swing, step). What it fundamentally lacks is a
-**feedback loop for balance** — which is exactly the drift/tilt seen on hardware.
+Built fresh on mjlab's velocity machinery (never edit mjlab site-packages).
+**One policy, two behaviours:** `GaitCommand` emits `[march, sin, cos]`; a
+fraction of envs march each episode and the policy observes the bit, so the same
+network holds still or steps in place depending on one runtime flag.
 
-**RL is the right next step.** A trained policy reads the IMU every tick
-(angular velocity + projected gravity) and actively corrects lean/drift. Ground
-already laid:
-- 12 DOF with ankle roll → static one-foot support exists (the mechanical
-  prerequisite).
-- A validated digital twin that now matches the real robot well (masses, limits,
-  and the calibration work close the sim-to-real gap).
-- The MJCF already exposes the IMU sensors the policy needs.
+- Actor observations are **proprio-only** — gyro, projected gravity, joint
+  pos/vel, last action, gait command. No base linear velocity, because the IMU
+  velocimeter is not trustworthy on hardware. This is exactly what the Pi can
+  supply.
+- Actuators are modelled as STS3215 position servos with **kp=20 / kd=0.5, the
+  same values `hardware/k2_bus.py` uses**, so the actuator sim-to-real gap is
+  zero by construction.
+- Domain randomization covers the gaps chased during bring-up: pseudo-inertia
+  +-15%, foot friction 0.4-1.1, PD gains x0.8-1.2, encoder bias +-0.02 rad
+  (home/calibration offset), base CoM offset, control latency, random pushes.
+- Default pose is a symmetric standing crouch that is self-stable under kp/kd.
 
-To build it: a fresh **12-DOF training env from mjlab's velocity-locomotion
-template** (the old `k2_walk_rl`/`k2_squat_rl` packages were deleted — build new,
-never edit mjlab site-packages), with **domain randomization** (mass, friction,
-control latency, and small calibration/home offsets — exactly the real-world
-mismatches chased during bring-up) so the policy transfers. Export to ONNX, run on
-the Pi over the same `Bus` abstraction. Reward tip: use quadratic penalties for
-"keep X near a target"; exp-kernel rewards with small std go flat and give no
-gradient at large error.
+**Two gotchas that will recur:**
+1. **Fusion chained joint names** — `hip_pitch` is a substring of the hip_roll
+   joint name. Use the parent-anchored regexes in `k2_constants.JOINT_PATTERNS`,
+   never a bare `.*hip_pitch.*`.
+2. **`dr.pseudo_inertia` on `.*` bodies crashes** (cholesky "not positive
+   definite") because it perturbs the massless free-joint carrier. Target only
+   the massive links.
+
+Reward tip: use quadratic penalties for "keep X near a target"; exp-kernel
+rewards with small std go flat and give no gradient at large error.
 
 ---
 
@@ -335,17 +377,19 @@ python scripts/phase1_mass.py && python scripts/phase2_make_mjcf.py
 python -c "from hardware import k2_conventions as C; C.write_joint_limits()"
 
 # hardware bring-up:
-sudo chmod 666 /dev/ttyACM0                              # after every replug
-python -m hardware.set_servo_id --port /dev/ttyACM0 --scan
-DISPLAY=:1 python -m hardware.k2_calibrate               # calibrate (GUI)
-python -m hardware.go_home --bus /dev/ttyACM0            # ease to straight home
+python -m hardware.set_servo_id --port /dev/ttyAMA0 --scan
+DISPLAY=:1 python -m hardware.k2_calibrate                  # calibrate (GUI)
+python -m hardware.check_joint_signs --joints all --amp 10  # verify signs, held in air
+python -m hardware.calibrate_imu_level                      # IMU mounting tilt
+python -m hardware.go_home --bus /dev/ttyAMA0               # ease to straight home
 
-# tests (sim first, then real):
-python -m hardware.test_crouch --bus sim --viewer
-python -m hardware.test_swing  --bus /dev/ttyACM0            # right stance
-python -m hardware.test_swing  --bus /dev/ttyACM0 --stance L # left stance
-python -m hardware.k2_walk_ik  --bus /dev/ttyACM0            # the IK walk
+# validate, then run the policy (sim first, then real):
+python -m hardware.test_default_crouch --bus sim --viewer
+python -m hardware.k2_policy_run --bus sim --viewer --mode march \
+  --policy policies/march_hold_v4_1999.onnx
+python -m hardware.k2_policy_run --bus /dev/ttyAMA0 --mode hold \
+  --policy policies/march_hold_v4_1999.onnx
 ```
 
-Ctrl-C always drops the robot limp. On the real robot, start slow, keep a hand
-near it, and spot it — the IK walk is open-loop.
+Ctrl-C always drops the robot limp. On the real robot start slow, keep a hand
+near it, and always run `--mode hold` before `--mode march`.

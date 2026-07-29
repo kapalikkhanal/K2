@@ -1,31 +1,30 @@
 {
   "home_raw": {
-    "hip_pitch_R": 1703,
-    "hip_roll_R": 3100,
-    "hip_yaw_R": 1974,
-    "knee_R": 2328,
-    "ankle_pitch_R": 2565,
-    "ankle_roll_R": 2351, 
-    "hip_pitch_L": 1839,
-    "hip_roll_L": 1396, 
-    "hip_yaw_L": 2146,
-    "knee_L": 2233,
-    "ankle_pitch_L": 1791,
-    "ankle_roll_L": 2010 
+    "hip_pitch_R": 1917,
+    "hip_roll_R": 2347,
+    "hip_yaw_R": 2312,
+    "knee_R": 2193,
+    "ankle_pitch_R": 1801,
+    "ankle_roll_R": 1995,
+    "hip_pitch_L": 1697,
+    "hip_roll_L": 3155,
+    "hip_yaw_L": 1813,
+    "knee_L": 2326,
+    "ankle_pitch_L": 2555,
+    "ankle_roll_L": 2386
   },
   "sign": {
-    "hip_pitch_R": -1,
+    "hip_pitch_R": 1,
     "hip_roll_R": 1,
-    "hip_yaw_R": -1,
-    "knee_R": -1,
-    "ankle_pitch_R": -1,
-    "ankle_roll_R": -1,
-    "hip_pitch_L": 1,
-    "hip_roll_L": 1,
-    "hip_yaw_L": 1,
-    "knee_L": 1,
-    "ankle_pitch_L": 1,
-    "ankle_roll_L": 1
+    "hip_yaw_R": 1,
+    "knee_R": 1,
+    "ankle_pitch_R": 1,
+    "ankle_roll_R": 1,
+    "hip_pitch_L": -1,
+    "hip_roll_L": -1,
+    "hip_yaw_L": -1,
+    "knee_L": -1,
+    "ankle_pitch_L": -1,
+    "ankle_roll_L": -1
   }
 }
-

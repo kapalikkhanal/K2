@@ -8,7 +8,8 @@ switch between two behaviours **in place** (zero net translation):
 
 The `march` bit is a per-episode command the policy observes (a fraction of envs
 march, the rest hold), so a single trained policy does both — flip the bit at run
-time. This is the balance-feedback loop the open-loop IK walk lacked
+time. This is a closed balance-feedback loop: the policy reads the IMU every
+tick and actively corrects lean and drift
 (`robot.md` §10).
 
 Built on mjlab's velocity-locomotion machinery, closely mirroring the Unitree G1
@@ -40,8 +41,8 @@ cd ~/K2
 The MJCF is the validated twin `mjcf/k2_physics.xml` (12 joints, feet-only
 collision, IMU sensors). **Fusion naming gotcha:** joint names chain
 `<parent>_<child>_…`, so `hip_pitch` also appears in the hip_roll joint name and
-`ankle_pitch` in the ankle_roll joint name — always use the parent-anchored
-patterns in `k2_constants.JOINT_PATTERNS`, never a bare `.*hip_pitch.*`.
+Always use the anchored patterns in `k2_constants.JOINT_PATTERNS`, never a
+bare substring such as `.*hip_pitch.*`.
 
 ## Train
 

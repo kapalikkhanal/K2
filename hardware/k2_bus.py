@@ -79,7 +79,7 @@ class Bus(ABC):
 class SerialBus(Bus):
     """The real STS3215 chain on a Waveshare adapter."""
 
-    def __init__(self, port: str = "/dev/ttyACM0", baud: int = 1_000_000,
+    def __init__(self, port: str = "/dev/ttyAMA0", baud: int = 1_000_000,
                  ids: list[int] | None = None):
         import scservo_sdk as scs
 
@@ -109,7 +109,7 @@ class SerialBus(Bus):
         # if the chain is still incomplete, fail so the caller's finally block
         # releases torque.
         missing_pos = missing_spd = []
-        for attempt in range(2):
+        for attempt in range(5):
             self._reader.txRxPacket()
             pos, spd = {}, {}
             for i in self.ids:
@@ -122,8 +122,12 @@ class SerialBus(Bus):
             missing_spd = [i for i in self.ids if i not in spd]
             if not missing_pos and not missing_spd:
                 return pos, spd
+            # Loaded servos can occasionally stretch one UART response. Give
+            # the chain 1 ms to recover before retrying, still well inside the
+            # 20 ms control period.
+            time.sleep(0.001)
         raise RuntimeError(
-            f"incomplete servo sync read after retry: "
+            f"incomplete servo sync read after 5 retries: "
             f"missing position IDs {missing_pos}, speed IDs {missing_spd}")
 
     def write_goals(self, id_to_raw: dict[int, int]) -> None:
