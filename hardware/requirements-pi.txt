@@ -1,5 +1,7 @@
 # Runtime packages not supplied by Raspberry Pi OS.
-# The venv is created with --system-site-packages to reuse apt's numpy/scipy.
+# The venv is created with --system-site-packages to reuse apt's numpy.
 mujoco==3.6.0
 feetech-servo-sdk==1.0.0
 onnxruntime==1.27.0
+smbus2==0.4.3
+scipy==1.16.1

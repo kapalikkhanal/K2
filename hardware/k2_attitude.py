@@ -16,9 +16,9 @@ The walk observation is (verified against the env):
     It trusts gyro propagation during dynamic acceleration and smoothly restores
     accelerometer correction near 1 g.
 
-R_IMU_TO_ROOT (chip->root) was found empirically: feeding the sim gyro through
-it reproduces root_link_ang_vel_b exactly. It rotates the filtered gravity
-estimate into the root frame. It is a fixed rotation (IMU rigid to the base).
+R_IMU_TO_ROOT (chip->root) is measured from held physical tilts and rotates the
+filtered gravity estimate into the root frame. It is a fixed rotation because
+the IMU is rigidly attached to the base.
 """
 
 from __future__ import annotations
@@ -28,11 +28,15 @@ from pathlib import Path
 
 import numpy as np
 
-# chip frame -> k2_root frame. root_x = -chip_y, root_y = chip_x, root_z = chip_z.
-# Validated by the gravity path: this is what makes projected_gravity read
-# [0, 0, -1] at a level stand, which the robot's stable crouch depends on.
-R_IMU_TO_ROOT = np.array([[0.0, -1.0, 0.0],
-                          [1.0, 0.0, 0.0],
+# chip frame -> k2_root frame. root_x = chip_y, root_y = -chip_x, root_z = chip_z.
+# Re-measured on the physical Robot_v4 on 2026-08-15 using held static tilts:
+#   physical forward  -> old policy pitch -12.5 deg (must be positive)
+#   physical backward -> old policy pitch +13.9 deg (must be negative)
+#   physical right    -> old policy roll  +12.8 deg (must be negative)
+# Both horizontal axes were inverted.  Flipping X and Y together is a proper
+# 180-degree rotation about root Z (determinant +1), not a reflection.
+R_IMU_TO_ROOT = np.array([[0.0, 1.0, 0.0],
+                          [-1.0, 0.0, 0.0],
                           [0.0, 0.0, 1.0]])
 
 # MJCF `imu` site frame -> k2_root frame, read straight off the compiled model
@@ -79,9 +83,7 @@ class ImuAttitude:
 
     def __init__(self, bus_number: int = 1, alpha: float = 0.02,
                  alpha_min: float = 0.001, bias_samples: int = 200):
-        import sys
-        sys.path.insert(0, "/home/pi/IMU")
-        from visualize_imu import LSM6DS3
+        from .lsm6ds3 import LSM6DS3
 
         self.imu = LSM6DS3(bus_number)
         self.alpha = alpha            # maximum accel trust per tick
@@ -95,17 +97,12 @@ class ImuAttitude:
         # gravity path), apply the level correction there, then go back out to
         # the site frame with R_SITE_TO_ROOT.T.
         #
-        # This previously used R_IMU_TO_ROOT.T on the way back, i.e. it assumed
-        # the chip frame and the MJCF site frame were the same. They are not:
-        # R_SITE_TO_ROOT.T @ R_IMU_TO_ROOT = diag(-1, +1, -1), so the pitch-rate
-        # and yaw-rate channels reached the policy SIGN-INVERTED while roll was
-        # correct. Inverted rate feedback is anti-damping: invisible standing
-        # still (gyro ~ 0), divergent once marching. Measured on hardware
-        # 2026-07-28 by differentiating the gravity-derived angles -- pitch
-        # channel gain -1.00 (corr -1.00, n=144), roll channel +0.98 (n=43),
-        # no cross-axis leakage. The yaw channel is not observable from gravity
-        # and is corrected here by the same matrix, consistent with the ~60-90
-        # deg / 5 s yaw drift seen on the real robot.
+        # The chip frame and the MJCF site frame are not the same. With the
+        # measured mounting rotation, chip -> site is
+        # R_SITE_TO_ROOT.T @ R_IMU_TO_ROOT = diag(+1, -1, -1). The same proper
+        # frame chain is used for gyro and gravity; dynamic gyro signs are
+        # validated separately against differentiated gravity after any mount
+        # transform change.
         self.gyro_correction = (
             R_SITE_TO_ROOT.T @ self.root_correction @ R_IMU_TO_ROOT
         )

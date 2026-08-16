@@ -40,46 +40,17 @@ SIM_ORDER = (
     "hip_pitch_L", "hip_roll_L", "hip_yaw_L", "knee_L", "ankle_pitch_L", "ankle_roll_L",
 )
 
-# Physical servo IDs -- CONFIRMED CORRECT on hardware 2026-07-28.
-#
-# Two transpositions were tried on the real robot that day and BOTH made it
-# worse, so do not "fix" this map again without a held-air check first:
-#   * hips  4/7 <-> 5/6 (pitch/roll)  -> worse
-#   * ankles 0/1 and 10/11 (pitch/roll) -> worse
-# Both had already been contradicted by check_joint_signs, where every joint
-# matched POS_DESC at +-10..17 deg.
-#
-# The map is a clean daisy-chain: right foot (0) up to the right hip (5),
-# across to the left hip (6), down to the left foot (11).
-#
-# CAUTION: these checks are all MIRROR-SYMMETRIC in wording ("outward",
-# "pigeon-toed", "toe up"), so they confirm each joint's AXIS and SIGN but are
-# blind to whether the "_R" servos are on the leg the MJCF calls right. See the
-# note on JOINT_TO_MJCF below -- the MJCF's `right_*` bodies sit at +y, which is
-# the robot's own LEFT.
-# LEGS SWAPPED 2026-07-28, proven on hardware. The MJCF's `_R` joints drive the
-# servos on the OTHER physical leg (IDs 6..11), and `_L` drives 0..5. Measured
-# back-to-back on the real robot with the same policy and the same 10 deg tilt
-# cutoff: unswapped safety-stopped at 11.4 deg after 10.5 s of marching, swapped
-# ran the full 15 s at 3.9 deg. The decisive number is not survival but gait
-# coherence -- the fraction of base roll locked to the 0.75 Hz gait clock went
-# 60% -> ~100% (amplitude 1.45 -> 2.57 deg at identical total roll), i.e. the
-# lateral weight shift now loads the leg that is actually planting.
-#
-# calibration.json's R/L entries were swapped by the SAME permutation, so every
-# servo keeps its own measured home_raw/sign (backup: calibration.json
-# .prelegswap.bak). Signs stay valid because every POS_DESC is mirror-symmetric
-# ("outward", "pigeon-toed", "toe up"), which is also precisely why none of the
-# held-air sign checks could ever have caught this.
-#
-# PREVIOUS (unswapped) MAP, if this ever needs reverting -- revert BOTH this and
-# calibration.json together:
-#   "ankle_roll_R": 0, "ankle_pitch_R": 1, "knee_R": 2, "hip_yaw_R": 3,
-#   "hip_roll_R": 4, "hip_pitch_R": 5, "hip_pitch_L": 6, "hip_roll_L": 7,
-#   "hip_yaw_L": 8, "knee_L": 9, "ankle_pitch_L": 10, "ankle_roll_L": 11
+# Physical servo IDs, re-established from fresh sim/real gait tests on
+# 2026-08-15. Fusion's MJCF bodies named `*_right` sit at +root-Y, which is the
+# robot's physical LEFT side. Therefore the policy/MJCF `_R` block must drive
+# the physical-left chain IDs 0..5, and `_L` drives physical-right IDs 6..11.
+# This was proven with matched-phase traces: the reversible policy leg swap
+# changed the first swing from physical right to physical left and aligned the
+# real roll/pitch signs with MuJoCo. calibration.json was swapped at the same
+# time so each physical servo retained its captured home and sign.
 JOINT_TO_ID = {
-    "ankle_roll_R": 11, "ankle_pitch_R": 10, "knee_R": 9, "hip_yaw_R": 8, "hip_roll_R": 7, "hip_pitch_R": 6,
-    "hip_pitch_L": 5, "hip_roll_L": 4, "hip_yaw_L": 3, "knee_L": 2, "ankle_pitch_L": 1, "ankle_roll_L": 0,
+    "ankle_roll_R": 0, "ankle_pitch_R": 1, "knee_R": 2, "hip_yaw_R": 3, "hip_roll_R": 4, "hip_pitch_R": 5,
+    "hip_pitch_L": 6, "hip_roll_L": 7, "hip_yaw_L": 8, "knee_L": 9, "ankle_pitch_L": 10, "ankle_roll_L": 11,
 }
 IDS = [JOINT_TO_ID[j] for j in SIM_ORDER]
 
@@ -107,18 +78,18 @@ MJCF_TO_JOINT = {v: k for k, v in JOINT_TO_MJCF.items()}
 # Descriptions below were re-measured from the current Robot_v4 MJCF. They
 # describe the direction used by NUDGE_DIR, not the raw encoder direction.
 POS_DESC = {
-    "hip_pitch_R": "right foot swings BACKWARD",
-    "hip_roll_R": "right foot swings OUTWARD, away from the left leg",
-    "hip_yaw_R": "right TOE rotates INWARD (pigeon-toed)",
-    "knee_R": "right knee BENDS (heel rises relative to toe)",
-    "ankle_pitch_R": "right TOE tilts UP (dorsiflex), heel drops",
-    "ankle_roll_R": "right foot's OUTER edge LIFTS, inner edge (toward the left foot) DROPS",
-    "hip_pitch_L": "left foot swings BACKWARD",
-    "hip_roll_L": "left foot swings OUTWARD, away from the right leg",
-    "hip_yaw_L": "left TOE rotates INWARD (pigeon-toed)",
-    "knee_L": "left knee BENDS (heel rises relative to toe)",
-    "ankle_pitch_L": "left TOE tilts UP (dorsiflex), heel drops",
-    "ankle_roll_L": "left foot's OUTER edge LIFTS, inner edge (toward the right foot) DROPS",
+    "hip_pitch_R": "physical LEFT foot swings BACKWARD",
+    "hip_roll_R": "physical LEFT foot swings OUTWARD, away from the other leg",
+    "hip_yaw_R": "physical LEFT TOE rotates INWARD (pigeon-toed)",
+    "knee_R": "physical LEFT knee BENDS (heel rises relative to toe)",
+    "ankle_pitch_R": "physical LEFT TOE tilts UP (dorsiflex), heel drops",
+    "ankle_roll_R": "physical LEFT foot's OUTER edge LIFTS, inner edge DROPS",
+    "hip_pitch_L": "physical RIGHT foot swings BACKWARD",
+    "hip_roll_L": "physical RIGHT foot swings OUTWARD, away from the other leg",
+    "hip_yaw_L": "physical RIGHT TOE rotates INWARD (pigeon-toed)",
+    "knee_L": "physical RIGHT knee BENDS (heel rises relative to toe)",
+    "ankle_pitch_L": "physical RIGHT TOE tilts UP (dorsiflex), heel drops",
+    "ankle_roll_L": "physical RIGHT foot's OUTER edge LIFTS, inner edge DROPS",
 }
 
 # Which way to nudge when checking a sign. BOTH knees are one-sided on v3/v4

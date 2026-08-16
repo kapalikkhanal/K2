@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 
 import numpy as np
 
 from .k2_attitude import LEVEL_CALIB_PATH, R_IMU_TO_ROOT
+from .lsm6ds3 import LSM6DS3
 
 
 def rotation_to_down(g: np.ndarray) -> np.ndarray:
@@ -40,9 +40,6 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     if args.samples < 50:
         raise SystemExit("use at least 50 samples")
-
-    sys.path.insert(0, "/home/pi/IMU")
-    from visualize_imu import LSM6DS3
 
     imu = LSM6DS3(args.bus_number)
     readings = []

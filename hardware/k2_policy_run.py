@@ -112,6 +112,8 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
     return gyro, gravity, tilt
 
   rows = []
+  tracking_errors = []
+  telemetry_samples = []
   sim_diag = {
     "swing_spread": [],
     "apex_clearance": [],
@@ -163,13 +165,17 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
   def write_log():
     if log is None or not rows:
       return
-    header = ["t", "march", "tilt",
+    header = ["t", "t_nominal", "loop_dt", "march", "phase", "tilt",
               "gyro_x", "gyro_y", "gyro_z",
               "gravity_x", "gravity_y", "gravity_z"]
     header += [f"action_{j}" for j in C.SIM_ORDER]
     header += [f"cmd_{j}" for j in C.SIM_ORDER]
     header += [f"q_{j}" for j in C.SIM_ORDER]
     header += [f"qd_{j}" for j in C.SIM_ORDER]
+    header += [f"error_{j}" for j in C.SIM_ORDER]
+    for field in ("load", "current_raw", "voltage", "temperature", "status",
+                  "telemetry_outlier"):
+      header += [f"{field}_{j}" for j in C.SIM_ORDER]
     np.savetxt(log, np.asarray(rows), delimiter=",",
                header=",".join(header), comments="")
     print(f"wrote {log}")
@@ -193,10 +199,25 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
     cmd = default_pos.copy()
     n_steps = int(duration * RATE_HZ)
     t0 = time.perf_counter()
+    previous_tick_time = t0
     for k in range(n_steps):
+      tick_time = time.perf_counter()
+      loop_dt = tick_time - previous_tick_time
+      previous_tick_time = tick_time
       pos, spd = bus.read_pos_speed()
       q = C.q_vector(pos, calib).astype(np.float32)
       qd = C.qd_vector(spd, calib).astype(np.float32)
+      telemetry = bus.latest_telemetry()
+      if telemetry is None:
+        telemetry_arrays = [np.full(12, np.nan, np.float32) for _ in range(6)]
+      else:
+        telemetry_arrays = [
+          np.array([telemetry[C.JOINT_TO_ID[j]][field] for j in C.SIM_ORDER],
+                   np.float32)
+          for field in ("load_signed", "current_raw", "voltage_v",
+                        "temperature_c", "error_status", "temperature_outlier")
+        ]
+        telemetry_samples.append(np.stack(telemetry_arrays))
       gyro, proj_grav, tilt = attitude()
 
       # Gait command: march from the start, or after `march_after` seconds.
@@ -235,6 +256,9 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
         step = slew_rad_s * dt
         target = cmd + np.clip(target - cmd, -step, step)
       cmd = target
+      tracking_error = cmd - q
+      if marching:
+        tracking_errors.append(tracking_error.copy())
 
       bus.write_goals(C.goal_counts(cmd, calib))
       bus.tick(dt)
@@ -242,8 +266,9 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
 
       if log is not None:
         rows.append(np.concatenate([
-          [time.perf_counter() - t0, float(m), tilt],
-          gyro, proj_grav, action, cmd, q, qd,
+          [time.perf_counter() - t0, k * dt, loop_dt, float(m), phase, tilt],
+          gyro, proj_grav, action, cmd, q, qd, tracking_error,
+          *telemetry_arrays,
         ]))
 
       if k % 25 == 0:
@@ -257,6 +282,33 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
 
     hz = n_steps / (time.perf_counter() - t0)
     print(f"  ran {n_steps} policy ticks at {hz:.1f} Hz (target {RATE_HZ:.0f})")
+    if tracking_errors:
+      err = np.asarray(tracking_errors)
+      rms = np.sqrt(np.mean(err * err, axis=0))
+      peak = np.max(np.abs(err), axis=0)
+      worst_rms = int(np.argmax(rms))
+      worst_peak = int(np.argmax(peak))
+      print("  command tracking during march:")
+      print(f"    worst RMS:  {C.SIM_ORDER[worst_rms]} "
+            f"{math.degrees(rms[worst_rms]):.2f} deg")
+      print(f"    worst peak: {C.SIM_ORDER[worst_peak]} "
+            f"{math.degrees(peak[worst_peak]):.2f} deg")
+    if telemetry_samples:
+      telem = np.asarray(telemetry_samples)  # tick, field, joint
+      voltage = telem[:, 2, :]
+      temperature = telem[:, 3, :]
+      status = telem[:, 4, :]
+      outliers = telem[:, 5, :]
+      vi = np.unravel_index(np.argmin(voltage), voltage.shape)
+      ti = np.unravel_index(np.argmax(temperature), temperature.shape)
+      print("  servo telemetry:")
+      print(f"    minimum voltage: {voltage[vi]:.1f} V "
+            f"({C.SIM_ORDER[vi[1]]})")
+      print(f"    maximum temperature: {temperature[ti]:.0f} C "
+            f"({C.SIM_ORDER[ti[1]]})")
+      print(f"    nonzero error samples: {int(np.count_nonzero(status))}")
+      print(f"    rejected temperature outliers: "
+            f"{int(np.count_nonzero(outliers))}")
   finally:
     # Preserve the samples leading up to a safety stop; these are the most
     # important data for deciding whether a policy is safe enough for hardware.
@@ -298,9 +350,8 @@ def main(argv=None):
   ap.add_argument("--yes", action="store_true",
                   help="skip the confirmation prompt on hardware")
   ap.add_argument("--swap-legs", action="store_true",
-                  help="DIAGNOSTIC ONLY -- the leg swap is now BAKED INTO "
-                       "k2_conventions.JOINT_TO_ID and calibration.json, so "
-                       "this flag now swaps them BACK to the known-bad wiring.")
+                  help="diagnostic: swap the policy's right/left observation "
+                       "and action joint blocks without changing servo calibration")
   args = ap.parse_args(argv)
 
   sess = ort.InferenceSession(args.policy, providers=["CPUExecutionProvider"])
@@ -316,10 +367,8 @@ def main(argv=None):
     print(f"Policy neutral base shift: {neutral_base_shift_m*1000:+.1f} mm")
 
   if args.swap_legs:
-    print("WARNING: --swap-legs undoes the leg mapping now baked into "
-          "JOINT_TO_ID + calibration.json.\n"
-          "         This reproduces the FAILING configuration. Diagnostic use "
-          "only.")
+    print("DIAGNOSTIC: swapping policy right/left joint blocks; servo IDs and "
+          "per-servo calibration remain unchanged.")
 
   real = args.bus != "sim"
   if real and not args.yes:
@@ -354,8 +403,10 @@ def main(argv=None):
       print(f"SAFETY STOP: {exc}")
       return 2
   finally:
-    bus.torque(False)
-    bus.close()
+    try:
+      bus.torque(False)
+    finally:
+      bus.close()
   return 0
 
 

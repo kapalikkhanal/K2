@@ -67,6 +67,10 @@ class Bus(ABC):
     @abstractmethod
     def tick(self, dt: float) -> None: ...
 
+    def latest_telemetry(self) -> dict[int, dict[str, int | float]] | None:
+        """Most recent per-servo telemetry, or None when unsupported."""
+        return None
+
     def close(self) -> None: ...
 
     def __enter__(self):
@@ -85,22 +89,82 @@ class SerialBus(Bus):
 
         self.scs = scs
         self.ids = list(ids) if ids is not None else list(C.IDS)
+        self.port = port
+        self.baud = baud
         self.ph = scs.PortHandler(port)
         self.pk = scs.PacketHandler(0)
-        if not self.ph.openPort():
-            raise RuntimeError(
-                f"open {port} failed. If it is a permission error: "
-                f"sudo chmod 666 {port}  (it resets on every replug)")
+        # PortHandler.openPort() already configures its default 1 Mbps baud;
+        # calling setBaudRate() immediately afterwards closes and reopens the
+        # UART unnecessarily.  That second open can fail after a partial read.
         if not self.ph.setBaudRate(baud):
-            raise RuntimeError("setBaudRate failed")
-        self._reader = scs.GroupSyncRead(self.ph, self.pk, C.ADDR_PRESENT_POS, 4)
+            raise RuntimeError(
+                f"open/configure {port} failed. If it is a permission error: "
+                f"sudo chmod 666 {port}  (it resets on every replug)")
+        # One coherent block covers position through present current (56..70).
+        # This adds dynamic voltage/load/current/temperature observability while
+        # preserving one sync-read transaction per control tick.
+        self._reader = scs.GroupSyncRead(self.ph, self.pk, C.ADDR_PRESENT_POS, 15)
         for i in self.ids:
             self._reader.addParam(i)
         self._next = None
+        self._telemetry = None
 
     def torque(self, on: bool) -> None:
-        for i in self.ids:
-            self.pk.write1ByteTxRx(self.ph, i, C.ADDR_TORQUE, 1 if on else 0)
+        target = 1 if on else 0
+        pending = set(self.ids)
+        last_errors = {}
+        # A safety-stop happens while the bus and loaded servos are busiest.
+        # A single unchecked write can be dropped, leaving every geared joint
+        # actively holding the last gait target.  Retry and verify the actual
+        # register state before returning.
+        for _ in range(5):
+            try:
+                for sid in list(pending):
+                    self.ph.clearPort()
+                    result, error = self.pk.write1ByteTxRx(
+                        self.ph, sid, C.ADDR_TORQUE, target
+                    )
+                    last_errors[sid] = (result, error)
+                    time.sleep(0.002)
+                time.sleep(0.01)
+                for sid in list(pending):
+                    self.ph.clearPort()
+                    value, result, error = self.pk.read1ByteTxRx(
+                        self.ph, sid, C.ADDR_TORQUE
+                    )
+                    last_errors[sid] = (result, error)
+                    if (result == self.scs.COMM_SUCCESS and error == 0
+                            and value == target):
+                        pending.remove(sid)
+            except Exception as exc:
+                for sid in pending:
+                    last_errors[sid] = exc
+                # PySerial can leave the descriptor unusable after a partial
+                # UART read. Reopen it before the next safety-write attempt.
+                try:
+                    self.ph.closePort()
+                except Exception:
+                    pass
+                time.sleep(0.02)
+                try:
+                    self.ph.setBaudRate(self.baud)
+                except Exception as reopen_exc:
+                    for sid in pending:
+                        last_errors[sid] = reopen_exc
+            if not pending:
+                return
+        details_parts = []
+        for sid in sorted(pending):
+            failure = last_errors.get(sid, "no response")
+            if isinstance(failure, tuple):
+                failure = (f"{self.pk.getTxRxResult(failure[0])} "
+                           f"{self.pk.getRxPacketError(failure[1])}")
+            details_parts.append(f"id {sid}: {failure}")
+        details = ", ".join(details_parts)
+        raise RuntimeError(
+            f"failed to verify torque={'on' if on else 'off'} for "
+            f"IDs {sorted(pending)} ({details})"
+        )
 
     def read_pos_speed(self):
         # A sync read can occasionally omit one response. Never pass a partial
@@ -121,6 +185,38 @@ class SerialBus(Bus):
             missing_pos = [i for i in self.ids if i not in pos]
             missing_spd = [i for i in self.ids if i not in spd]
             if not missing_pos and not missing_spd:
+                telemetry = {}
+                for i in self.ids:
+                    def get(address, size):
+                        return int(self._reader.getData(i, address, size))
+                    load_raw = get(60, 2)
+                    temperature_raw = get(63, 1)
+                    previous = self._telemetry.get(i) if self._telemetry else None
+                    # A servo cannot change tens of degrees in 20 ms. Rare
+                    # otherwise-valid packets contained one corrupt byte
+                    # (78/95 C, immediately followed by a stable 36 C).
+                    temperature_outlier = int(
+                        previous is not None
+                        and abs(temperature_raw - previous["temperature_c"]) > 10
+                    )
+                    temperature = (
+                        previous["temperature_c"]
+                        if temperature_outlier else temperature_raw
+                    )
+                    telemetry[i] = {
+                        "load_raw": load_raw,
+                        "load_signed": (
+                            -(load_raw & 0x3ff)
+                            if load_raw & 0x400 else load_raw & 0x3ff
+                        ),
+                        "voltage_v": get(62, 1) * 0.1,
+                        "temperature_c": temperature,
+                        "temperature_outlier": temperature_outlier,
+                        "error_status": get(65, 1),
+                        "moving": get(66, 1),
+                        "current_raw": get(69, 2),
+                    }
+                self._telemetry = telemetry
                 return pos, spd
             # Loaded servos can occasionally stretch one UART response. Give
             # the chain 1 ms to recover before retrying, still well inside the
@@ -129,6 +225,9 @@ class SerialBus(Bus):
         raise RuntimeError(
             f"incomplete servo sync read after 5 retries: "
             f"missing position IDs {missing_pos}, speed IDs {missing_spd}")
+
+    def latest_telemetry(self):
+        return self._telemetry
 
     def write_goals(self, id_to_raw: dict[int, int]) -> None:
         gw = self.scs.GroupSyncWrite(self.ph, self.pk, C.ADDR_GOAL_POS, 2)

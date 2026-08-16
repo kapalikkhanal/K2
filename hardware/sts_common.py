@@ -38,10 +38,10 @@ LEG_IDS = {
 def open_port(port: str, baud: int = 1_000_000):
   ph = scs.PortHandler(port)
   pk = scs.PacketHandler(0)  # STS/SMS little-endian
-  if not ph.openPort():
-    raise RuntimeError(f"failed to open {port}")
+  # setBaudRate opens the port. Avoid openPort() followed by a redundant close
+  # and reopen, which can fail after a partial UART response.
   if not ph.setBaudRate(baud):
-    raise RuntimeError(f"failed to set baud {baud} on {port}")
+    raise RuntimeError(f"failed to open {port} at baud {baud}")
   return ph, pk
 
 

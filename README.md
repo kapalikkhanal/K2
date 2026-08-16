@@ -9,7 +9,7 @@ them at runtime.
 |---|---|
 | DOF | 12 revolute — 6 per leg (hip pitch / roll / yaw, knee, ankle pitch / roll) |
 | Actuators | 12× Feetech STS3215, 30 kg·cm @ 12 V (2.94 N·m, 4.712 rad/s) |
-| Modeled mass | 1.1786 kg |
+| Measured / modeled mass | 1.280 kg / 1.1786 kg (twin mass update pending) |
 | Hip height (straight pose) | 336 mm |
 | Foot-site stance width (straight pose) | 68 mm |
 | Controller | Raspberry Pi 5 (policy inference 0.012 ms/tick on one CPU thread) |
@@ -59,8 +59,9 @@ python -m hardware.k2_policy_run --bus /dev/ttyAMA0 --mode march \
   --policy policies/march_hold_v4_1999.onnx --log run.csv
 ```
 
-Torque is always released on exit, including Ctrl-C. `--slew` caps per-tick
-joint motion and `--fall-angle` cuts torque above a torso tilt.
+Torque release is retried and verified from every servo register on exit,
+including Ctrl-C. `--slew` caps per-tick joint motion and `--fall-angle` cuts
+torque above a torso tilt.
 
 ## Training
 
@@ -107,9 +108,10 @@ python -c "from hardware import k2_conventions as C; C.write_joint_limits()"
 - **The MJCF bodies named `*_right` sit at +y, i.e. on the robot's own LEFT.**
   Fusion named them from the viewer's side. `JOINT_TO_ID` accounts for this — read
   the leg-mapping note in `hardware/k2_conventions.py` before touching it.
-- The policy's `base_ang_vel` observation is the gyro in the **MJCF `imu` site
-  frame**, which is *not* the chip frame. `k2_attitude.py` converts chip -> root
-  -> site; skipping that step inverts the pitch and yaw rate channels.
+- The IMU chip frame is not the root or MJCF `imu` site frame.
+  `k2_attitude.py` uses the hardware-measured chip -> root -> site transforms;
+  held forward/right tilts and a dynamic gyro/gravity consistency test validate
+  the signs.
 - Collision is **feet only**, so the legs cannot snag on their own shells.
 - Timestep is **2 ms**. At 5 ms the foot-ground contact injects energy and the
   robot bounces higher than it was dropped from.

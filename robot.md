@@ -17,7 +17,8 @@ designed in Fusion 360 (current export: **Robot_v4**, 2026-07) and is developed
 touches hardware, and the *same control code* drives sim or the real robot by
 changing one flag.
 
-- **Total mass:** ~1179 g (modeled 1.1786 kg)
+- **Total mass:** **1280 g measured**; the current twin is 1.1786 kg and still
+  needs its extra 101.4 g distributed from physical mass/CoM measurements.
 - **Standing hip height:** ~364 mm; standing base-link height ~335 mm; CoM ~194 mm
 - **Nominal stance width:** feet at ±55–58 mm (≈110–116 mm apart)
 - **Controller:** Raspberry Pi 5 (see §9)
@@ -83,19 +84,16 @@ Key sign/limit facts (learned the hard way):
   Fix each time: `sudo chmod 666 /dev/ttyACM0` (or add user to `dialout`).
 
 ### Servo ID map — chain 0..11, both ankle-rolls at the ends
-Physical chain: right foot (0) up to the right hip (5), across to the left hip
-(6), down to the left foot (11).
+Physical chain: physical-left foot (0) up to its hip (5), across to the
+physical-right hip (6), down to its foot (11).
 
-**The MJCF's `_R` joints drive servos 6..11 and `_L` drives 0..5.** This is not a
-typo: the MJCF bodies named `*_right` sit at +y, which is the robot's **own
-LEFT** (Fusion names them from the viewer's side), so the model's "right leg" is
-the physical left leg. Proven on hardware — with the legs mapped straight through,
-the march safety-stopped at 11.4 deg after 10.5 s; mapped as below it ran the full
-15 s at 3.9 deg, and the fraction of base roll locked to the gait clock went from
-60% to ~100%.
-
-`calibration.json` is permuted by the same swap, so every servo keeps its own
-measured `home_raw`/`sign`. **Revert both together or neither.**
+**The MJCF's `_R` joints drive physical-left servos 0..5 and `_L` drives
+physical-right servos 6..11.** Fusion's `*_right` bodies sit at +root-Y, which
+is the robot's physical left. This mapping was re-established from fresh
+matched-phase tests on 2026-08-15: it selected the correct swing foot and made
+real roll/pitch signs match MuJoCo. `calibration.json` was swapped with the map
+so every physical servo retained its captured zero and sign. Change both
+together or neither.
 
 None of the held-air sign checks can catch a leg swap: every `POS_DESC` string is
 mirror-symmetric ("outward", "pigeon-toed", "toe up"), so all 12 joints pass on
@@ -282,14 +280,14 @@ IMU response is orthogonal to what that command should produce.
   `check_joint_signs.py`, both directions.
 - IMU mounting tilt calibrated (`calibrate_imu_level.py`); the gyro frame bug in
   §9 is fixed.
-- **Legs are mapped swapped** between model and hardware (§3) — required, proven
-  by back-to-back logged runs.
-- **Hold is solid.** Rock-steady, ~1.7 deg tilt, no drift.
-- **March runs** but with limited headroom: a good run peaks near 8.6 deg tilt
-  against a 12 deg cutoff. Roll is a geometric budget — half-stance ~34 mm with
-  the CoM ~200 mm up means a full quasi-static weight shift needs ~10 deg of
-  lean. Lower the CoM, narrow the stance, or raise the cadence; reward weights
-  will not buy margin that the geometry does not have.
+- **Permanent leg mapping validated** (§3); no deployment flag is required.
+- **Hold is solid**, settling near 0.7 deg tilt with no drift.
+- **March validation passed** for four continuous seconds (about six lifts) at
+  50 Hz with a 10.82 deg logged peak against a 12 deg cutoff. Minimum dynamic
+  servo voltage was 11.9 V and post-run temperatures were 35--39 C.
+- Dynamic command tracking remains less accurate than the twin: worst final-run
+  knee RMS/peak error was 3.71/8.51 deg. Actuator bandwidth identification and
+  the 101.4 g twin mass correction are the next sim-to-real tasks.
 - **Open defect:** the left foot's `heel`, `inner` and `outer` sole sites are not
   mirrors of the right foot's, which skews four reward terms against the left
   leg. Needs the sites corrected and a retrain.
@@ -305,23 +303,16 @@ Jetson would only be justified if cameras / a VLA are added later.
 
 IMU on the Pi: **LSM6DS3**, inside the electronics tray.
 
-**The chip frame is NOT the MJCF `imu` site frame** — this cost a full debugging
-session. The policy's `base_ang_vel` observation is the gyro in the *site* frame;
-`ImuAttitude` used to return it in the *chip* frame, and the two differ by
-`diag(-1, +1, -1)`. That delivered the **pitch and yaw rate channels
-sign-inverted** while roll was correct. Inverted rate feedback is anti-damping:
-invisible standing still (gyro ~ 0) and divergent once the robot moves, which is
-why hold was flawless while march destroyed itself. It also explains the
-long-standing ~5x pitch amplification and 60-90 deg yaw drift.
+**The chip frame is not the root or MJCF `imu` site frame.** Fresh held tests on
+2026-08-15 found both horizontal projected-gravity axes inverted: physical
+forward reported -12.5 deg pitch and physical right reported +12.8 deg roll.
+The measured mounting transform is now `root_x=chip_y`, `root_y=-chip_x`,
+`root_z=chip_z`; level calibration then reduced stationary tilt to 0.028 deg.
 
-`k2_attitude.py` now maps chip -> root (`R_IMU_TO_ROOT`, validated by the gravity
-path) -> site (`R_SITE_TO_ROOT.T`, read off the compiled MJCF).
-
-**How to test an IMU frame:** never with absolute left/right — +y is the robot's
-own left while the MJCF calls those bodies `*_right`. Use the convention-free
-invariant instead: for any tilt in any direction, integrated `obs[0]` / delta-pitch
-and integrated `obs[1]` / delta-roll must both equal **+1**. Yaw has no gravity
-reference, so phrase it as clockwise / counter-clockwise **seen from above**.
+`k2_attitude.py` maps chip -> root for gravity and chip -> root -> site for the
+policy gyro. `k2_imu_motion_test.py` validates the frame-invariant relationship
+`gravity_dot = -omega x gravity`; the corrected hardware measured correlation
+0.990 and gain 1.004 over 369 moving samples.
 
 ---
 
