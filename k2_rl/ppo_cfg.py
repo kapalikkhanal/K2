@@ -1,4 +1,4 @@
-"""PPO runner configuration for the K2 in-place task.
+"""PPO runner configurations for the K2 locomotion tasks.
 
 Smaller MLP than G1 (12-DOF, legs only, in-place) -- keeps inference light for
 the Pi 5 while staying plenty expressive. Same PPO hyperparameters as mjlab's
@@ -56,3 +56,7 @@ def k2_inplace_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
 
 def k2_forward_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return _runner("k2_forward_v1")
+
+
+def k2_full_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  return _runner("k2_full_v1")

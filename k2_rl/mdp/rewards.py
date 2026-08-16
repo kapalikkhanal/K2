@@ -255,6 +255,34 @@ def base_yaw_rate_l2(
   return torch.square(asset.data.root_link_ang_vel_b[:, 2])
 
 
+def gait_antisymmetry_l2(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  right_cfg: SceneEntityCfg,
+  left_cfg: SceneEntityCfg,
+) -> torch.Tensor:
+  """Penalize a left/right mismatch in sagittal swing amplitude.
+
+  An alternating gait is antiphase, so for a near-sinusoidal joint the two
+  legs' deviations from their own defaults should cancel: u_L(t) ~= -u_R(t).
+  Penalizing (u_R + u_L)^2 therefore costs amplitude mismatch without
+  prescribing a waveform. Measured on the iteration-2000 logs the residual is
+  only 12--13% forward-lean DC, so this reads real asymmetry rather than the
+  postural offset walking needs.
+
+  Intended for hip pitch only. Knee and ankle pitch swing as once-per-step
+  pulses whose antiphase sum is a nonzero constant, so the same penalty would
+  fight their normal shape.
+  """
+  asset: Entity = env.scene[right_cfg.name]
+  q = asset.data.joint_pos
+  d = asset.data.default_joint_pos
+  u_r = (q[:, right_cfg.joint_ids] - d[:, right_cfg.joint_ids]).sum(dim=1)
+  u_l = (q[:, left_cfg.joint_ids] - d[:, left_cfg.joint_ids]).sum(dim=1)
+  march = env.command_manager.get_command(command_name)[:, 0]
+  return march * torch.square(u_r + u_l)
+
+
 def base_heading_error(
   env: "ManagerBasedRlEnv",
   asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),

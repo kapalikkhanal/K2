@@ -7,7 +7,13 @@ between two behaviours **in place** (zero net translation):
 - **march** — step in place, alternating feet.
 
 `Mjlab-Forward-K2` is a separate low-speed task. It retains hold/march balance
-and adds a commanded forward speed in the initial 0.01--0.04 m/s range.
+and adds a commanded forward speed in the initial 0.01--0.04 m/s range. Its
+training scene mixes flat ground with 2 mm/5 mm roughness and gentle waves,
+while randomizing the measured hardware actuator latency and dynamics.
+
+`Mjlab-Full-K2` is isolated in `full_env_cfg.py`. It trains body-frame forward,
+backward, left/right, and yaw-rate commands from scratch; it does not alter the
+working forward-only policy interface.
 
 The `march` bit is a per-episode command the policy observes (a fraction of envs
 march, the rest hold), so a single trained policy does both — flip the bit at run
@@ -38,8 +44,9 @@ cd ~/K2
 | `mdp/rewards.py` | gait-aware rewards: `gait_contact`, `gait_swing`, `feet_planted`, `base_height_l2`. |
 | `inplace_env_cfg.py` | the task: flat ground, zero-twist (stay in place), proprio-only actor obs (gyro + gravity + joints + gait — what the Pi can supply), domain randomization. |
 | `forward_env_cfg.py` | 1--4 cm/s forward extension; heading feedback, foam-friction randomization, and full-sole swing clearance. |
+| `full_env_cfg.py` | robust omnidirectional task: ±4 cm/s x, ±2 cm/s y, and ±0.35 rad/s yaw. |
 | `ppo_cfg.py` | PPO runner (MLP 256-128-64, 3000 iters). |
-| `tasks.py` | registers `Mjlab-InPlace-K2` (play→hold) and `Mjlab-InPlace-March-K2` (play→march); both share one checkpoint. |
+| `tasks.py` | registers the in-place hold/march pair plus separate forward and full-locomotion tasks. |
 | `validate_pose.py` | sanity-checks the default crouch stands (feet flat, symmetric, self-stable). |
 
 The MJCF is the validated twin `mjcf/k2_physics.xml` (12 joints, feet-only
@@ -57,6 +64,10 @@ python -m k2_rl.train Mjlab-InPlace-K2 --env.scene.num-envs 4096 \
 # Low-speed heading-aware forward walking (48-D actor observation).
 python -m k2_rl.train Mjlab-Forward-K2 --env.scene.num-envs 4096 \
     --agent.max-iterations 2000 --agent.run-name forward_v1
+
+# Full x/y/yaw locomotion (train from scratch; do not load a forward checkpoint).
+python -m k2_rl.train Mjlab-Full-K2 --env.scene.num-envs 4096 \
+    --agent.max-iterations 3000 --agent.run-name full_v1
 ```
 
 Logs → `logs/rsl_rl/k2_inplace/<timestamp>_inplace_v1/`. An ONNX policy is
