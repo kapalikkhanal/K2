@@ -20,6 +20,7 @@ the defaults below are placeholders carried over from the single leg.
 
 from __future__ import annotations
 
+import math
 import time
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
@@ -69,6 +70,14 @@ class Bus(ABC):
 
     def latest_telemetry(self) -> dict[int, dict[str, int | float]] | None:
         """Most recent per-servo telemetry, or None when unsupported."""
+        return None
+
+    def base_position(self) -> np.ndarray | None:
+        """World xyz when the backend has ground-truth position (simulation)."""
+        return None
+
+    def base_heading(self) -> float | None:
+        """World yaw in radians when available (simulation only)."""
         return None
 
     def close(self) -> None: ...
@@ -354,6 +363,16 @@ class SimBus(Bus):
     def base_height(self) -> float:
         bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
         return float(self.data.xpos[bid][2])
+
+    def base_position(self) -> np.ndarray:
+        bid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
+        return self.data.xpos[bid].copy()
+
+    def base_heading(self) -> float:
+        # The free joint is first in qpos and stores quaternion wxyz.
+        w, x, y, z = self.data.qpos[3:7]
+        return float(math.atan2(2.0 * (w * z + x * y),
+                                1.0 - 2.0 * (y * y + z * z)))
 
     def true_base_state(self):
         """(gyro, proj_grav_b) matching the walk env's actor observation.

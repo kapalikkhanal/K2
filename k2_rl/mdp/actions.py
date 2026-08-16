@@ -15,9 +15,12 @@ if TYPE_CHECKING:
 
 @dataclass(kw_only=True)
 class DelayedJointPositionActionCfg(JointPositionActionCfg):
-  """Position targets delayed by a random number of physics substeps."""
+  """Position targets delayed across control steps and physics substeps."""
 
   max_delay_substeps: int = 0
+  min_delay_steps: int = 0
+  max_delay_steps: int = 0
+  """Random whole-control-step delay range (one step is 20 ms for K2)."""
   max_target_rate: float | None = None
   """Maximum applied position-target rate in rad/s. None disables limiting."""
 
@@ -40,6 +43,13 @@ class DelayedJointPositionAction(JointPositionAction):
         f"max_delay_substeps must be in [0, {env.cfg.decimation - 1}], "
         f"got {self._max_delay}"
       )
+    self._min_delay_steps = int(cfg.min_delay_steps)
+    self._max_delay_steps = int(cfg.max_delay_steps)
+    if not 0 <= self._min_delay_steps <= self._max_delay_steps:
+      raise ValueError(
+        "control-step delay must satisfy 0 <= min_delay_steps <= "
+        f"max_delay_steps, got {self._min_delay_steps}..{self._max_delay_steps}"
+      )
     self._default_target = self._entity.data.default_joint_pos[
       :, self._target_ids
     ].clone()
@@ -47,6 +57,13 @@ class DelayedJointPositionAction(JointPositionAction):
     self._prev_target = self._default_target.clone()
     self._commanded_target = self._default_target.clone()
     self._delay = torch.zeros(self.num_envs, 1, device=self.device)
+    self._step_delay = torch.zeros(
+      self.num_envs, dtype=torch.long, device=self.device
+    )
+    self._target_history = self._default_target.unsqueeze(0).repeat(
+      self._max_delay_steps + 1, 1, 1
+    )
+    self._history_index = 0
     self._substep = 0
 
   def process_actions(self, actions: torch.Tensor) -> None:
@@ -61,6 +78,19 @@ class DelayedJointPositionAction(JointPositionAction):
       )
       self._processed_actions = self._commanded_target + delta
     self._commanded_target = self._processed_actions.clone()
+    if self._max_delay_steps:
+      self._target_history[self._history_index] = self._commanded_target
+      self._step_delay.random_(
+        self._min_delay_steps, self._max_delay_steps + 1
+      )
+      history_ids = (
+        self._history_index - self._step_delay
+      ) % self._target_history.shape[0]
+      env_ids = torch.arange(self.num_envs, device=self.device)
+      self._processed_actions = self._target_history[history_ids, env_ids]
+      self._history_index = (
+        self._history_index + 1
+      ) % self._target_history.shape[0]
     if self._max_delay:
       self._delay = torch.randint(
         0,
@@ -89,3 +119,4 @@ class DelayedJointPositionAction(JointPositionAction):
     self._prev_target[env_ids] = self._default_target[env_ids]
     self._processed_actions[env_ids] = self._default_target[env_ids]
     self._commanded_target[env_ids] = self._default_target[env_ids]
+    self._target_history[:, env_ids] = self._default_target[env_ids]

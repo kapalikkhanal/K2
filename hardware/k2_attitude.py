@@ -65,9 +65,14 @@ class SimAttitude:
 
     def __init__(self, sim_bus):
         self.bus = sim_bus
+        self.initial_heading = float(sim_bus.base_heading() or 0.0)
 
     def attitude(self):
         return self.bus.true_base_state()
+
+    def heading_sin_cos(self) -> np.ndarray:
+        heading = float(self.bus.base_heading() or 0.0) - self.initial_heading
+        return np.array([np.sin(heading), np.cos(heading)], dtype=np.float32)
 
     def close(self):
         pass
@@ -91,6 +96,7 @@ class ImuAttitude:
         self.g_chip = None            # gravity estimate, chip frame
         self._deg2rad = np.pi / 180.0
         self.root_correction = _level_correction()
+        self.heading = 0.0
         # The actor's gyro observation is the gyro in the MJCF `imu` SITE frame
         # -- that is what mjlab's imu_ang_vel sensor reports at training time.
         # Take the chip gyro to the root frame (R_IMU_TO_ROOT, validated by the
@@ -152,8 +158,17 @@ class ImuAttitude:
         # base_ang_vel obs is the raw gyro (chip frame); gravity is rotated to
         # the root frame to match projected_gravity.
         proj_grav_b = self.root_correction @ R_IMU_TO_ROOT @ self.g_chip
-        gyro_nominal = self.gyro_correction @ gyro
+        gyro_root = self.root_correction @ R_IMU_TO_ROOT @ gyro
+        self.heading = (self.heading + float(gyro_root[2]) * dt + np.pi) % (
+            2.0 * np.pi
+        ) - np.pi
+        gyro_nominal = R_SITE_TO_ROOT.T @ gyro_root
         return gyro_nominal.astype(np.float32), proj_grav_b.astype(np.float32)
+
+    def heading_sin_cos(self) -> np.ndarray:
+        return np.array(
+            [np.sin(self.heading), np.cos(self.heading)], dtype=np.float32
+        )
 
     def close(self):
         try:

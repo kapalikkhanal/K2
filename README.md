@@ -2,14 +2,14 @@
 
 A 3D-printed 12-DOF bipedal robot that **stands and marches in place** under a
 reinforcement-learning policy, with a MuJoCo digital twin generated from the
-Fusion 360 CAD export. One policy learns both behaviours and switches between
-them at runtime.
+Fusion 360 CAD export. A separate heading-aware policy provides low-speed
+forward walking in the twin.
 
 | | |
 |---|---|
 | DOF | 12 revolute — 6 per leg (hip pitch / roll / yaw, knee, ankle pitch / roll) |
 | Actuators | 12× Feetech STS3215, 30 kg·cm @ 12 V (2.94 N·m, 4.712 rad/s) |
-| Measured / modeled mass | 1.280 kg / 1.1786 kg (twin mass update pending) |
+| Measured / modeled mass | 1.280 kg / 1.280 kg |
 | Hip height (straight pose) | 336 mm |
 | Foot-site stance width (straight pose) | 68 mm |
 | Controller | Raspberry Pi 5 (policy inference 0.012 ms/tick on one CPU thread) |
@@ -20,8 +20,8 @@ them at runtime.
 
 ## Scope
 
-This repository covers **hold** (stand still, reject pushes) and **march** (step
-in place, zero net translation). Forward walking is not included.
+This repository covers **hold**, **march**, and a separate low-speed,
+command-conditioned forward-walking task.
 
 ## Layout
 
@@ -47,6 +47,9 @@ Run the trained policy in the twin:
 ```bash
 python -m hardware.k2_policy_run --bus sim --viewer --mode march \
   --policy policies/march_hold_v4_1999.onnx
+
+python -m hardware.k2_policy_run --bus sim --viewer --mode walk \
+  --forward-speed 0.01 --policy policies/forward_walk_v1_iter950.onnx
 ```
 
 On the real robot (from the Pi):
@@ -122,14 +125,20 @@ python -c "from hardware import k2_conventions as C; C.write_joint_limits()"
 
 ## Status
 
-Hold is solid. March runs on hardware but with limited margin — a good run peaks
-around 8.6 deg of torso tilt against a 12 deg cutoff, and the sim march itself
-only carries about 2.5 deg of roll headroom. Roll is a geometric budget (stance
-width vs CoM height), not a reward-tuning knob.
+Hold is solid. The calibrated march completed 27 continuous unsupported seconds
+on hardware (after a 3 s hold), with a 12.54 deg exact logged peak against a
+14 deg cutoff. The gait is stable but still has limited tilt margin and a
+roughly 1.8 deg mean physical-left bias. Roll remains a geometric budget (stance
+width vs CoM height), not merely a reward-tuning knob.
 
-**Known defect:** the left foot's `heel`, `inner` and `outer` sole sites in the
-MJCF are not mirrors of the right foot's. This skews `feet_inner_clearance`,
-`feet_heel_clearance`, `gait_swing` and `swing_sole_flat` against the left leg.
-Correcting the sites requires a retrain to take effect.
+All five left/right sole reward sites now mirror within 0.001 mm. These sites do
+not change collision geometry; their symmetry prevents the gait rewards from
+teaching a lateral bias.
+
+The forward-walk checkpoint `forward_walk_v1_iter950.onnx` is trained over
+0.01--0.04 m/s with foam-compatible friction randomization. Nominal 20 s twin
+tests produce 10.1--10.6 mm minimum full-sole swing clearance across that speed
+range, no foot collisions, and at most 4.5 deg peak torso tilt. It has not yet
+been validated unsupported on hardware.
 
 See `robot.md` for the full reference and `k2_rl/README.md` for the task design.

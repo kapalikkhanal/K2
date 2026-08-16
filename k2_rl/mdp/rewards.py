@@ -63,6 +63,7 @@ def gait_swing(
   toe_cfg: SceneEntityCfg,
   inner_cfg: SceneEntityCfg,
   outer_cfg: SceneEntityCfg,
+  tracking_sigma: float = 0.008,
 ) -> torch.Tensor:
   """Track the same swing height at five points across each sole.
 
@@ -94,10 +95,10 @@ def gait_swing(
     ],
     dim=1,
   )  # [B, 5 sole points, 2 feet]
-  # 8 mm sigma is tight enough to make a clear 25 mm step without demanding
-  # high-frequency corrections from the loaded STS3215 servos.
+  # The task may tighten this tolerance when high-friction soles need the
+  # commanded clearance rather than a lower, reward-equivalent shuffle.
   tracking = torch.exp(
-    -torch.square(foot_z - target[:, None, :]) / (0.008**2)
+    -torch.square(foot_z - target[:, None, :]) / (tracking_sigma**2)
   )
   return torch.mean(tracking, dim=(1, 2)) * march
 
@@ -217,6 +218,52 @@ def base_lin_vel_xy_l2(
   return torch.sum(torch.square(v_xy), dim=1)
 
 
+def track_forward_velocity_exp(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  std: float,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Track the commanded body-frame forward speed without needing odometry.
+
+  The command is the optional fourth channel of ``GaitCommand``. It is zero in
+  hold environments and 1--4 cm/s in the first walking curriculum.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  if command.shape[1] < 4:
+    raise RuntimeError("forward velocity reward requires a 4-D gait command")
+  error = asset.data.root_link_lin_vel_b[:, 0] - command[:, 3]
+  return torch.exp(-torch.square(error) / (std**2))
+
+
+def base_lateral_velocity_l2(
+  env: "ManagerBasedRlEnv",
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Penalize sideways velocity while leaving commanded forward motion free."""
+  asset: Entity = env.scene[asset_cfg.name]
+  return torch.square(asset.data.root_link_lin_vel_b[:, 1])
+
+
+def base_yaw_rate_l2(
+  env: "ManagerBasedRlEnv",
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Direct yaw-rate penalty for straight-line walking."""
+  asset: Entity = env.scene[asset_cfg.name]
+  return torch.square(asset.data.root_link_ang_vel_b[:, 2])
+
+
+def base_heading_error(
+  env: "ManagerBasedRlEnv",
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Smooth, wrap-safe cost for deviation from the episode's forward axis."""
+  asset: Entity = env.scene[asset_cfg.name]
+  return 1.0 - torch.cos(asset.data.heading_w)
+
+
 def feet_xy_vel_l2(
   env: "ManagerBasedRlEnv",
   asset_cfg: SceneEntityCfg,
@@ -231,6 +278,16 @@ def feet_xy_vel_l2(
   asset: Entity = env.scene[asset_cfg.name]
   v_xy = asset.data.site_lin_vel_w[:, asset_cfg.site_ids, :2]  # [B, 2, 2]
   return torch.sum(torch.square(v_xy), dim=(1, 2))
+
+
+def feet_lateral_vel_l2(
+  env: "ManagerBasedRlEnv",
+  asset_cfg: SceneEntityCfg,
+) -> torch.Tensor:
+  """Penalize sideways foot motion but permit fore/aft walking trajectories."""
+  asset: Entity = env.scene[asset_cfg.name]
+  lateral = asset.data.site_lin_vel_w[:, asset_cfg.site_ids, 1]
+  return torch.sum(torch.square(lateral), dim=1)
 
 
 def feet_under_base_l2(
@@ -248,6 +305,16 @@ def feet_under_base_l2(
   mid = foot_xy.mean(dim=1)  # [B, 2]
   base_xy = asset.data.root_link_pos_w[:, :2]
   return torch.sum(torch.square(mid - base_xy), dim=1)
+
+
+def base_lateral_position_l2(
+  env: "ManagerBasedRlEnv",
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Penalize sideways drift from the spawn line, not forward progress."""
+  asset: Entity = env.scene[asset_cfg.name]
+  lateral = asset.data.root_link_pos_w[:, 1] - env.scene.env_origins[:, 1]
+  return torch.square(lateral)
 
 
 def feet_lateral_clearance_l2(

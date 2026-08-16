@@ -52,3 +52,7 @@ def _runner(experiment_name: str) -> RslRlOnPolicyRunnerCfg:
 
 def k2_inplace_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return _runner("k2_march_v4")
+
+
+def k2_forward_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  return _runner("k2_forward_v1")

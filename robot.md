@@ -17,8 +17,9 @@ designed in Fusion 360 (current export: **Robot_v4**, 2026-07) and is developed
 touches hardware, and the *same control code* drives sim or the real robot by
 changing one flag.
 
-- **Total mass:** **1280 g measured**; the current twin is 1.1786 kg and still
-  needs its extra 101.4 g distributed from physical mass/CoM measurements.
+- **Total mass:** **1280 g measured and modeled**. Link masses/inertias are
+  uniformly scaled by 1.086034, preserving the CAD CoM until physical CoM data
+  is available; training still randomizes the base CoM.
 - **Standing hip height:** ~364 mm; standing base-link height ~335 mm; CoM ~194 mm
 - **Nominal stance width:** feet at ±55–58 mm (≈110–116 mm apart)
 - **Controller:** Raspberry Pi 5 (see §9)
@@ -209,9 +210,10 @@ Core modules:
 - **`k2_motion.py`** — `SquatIK`, a flat-foot double-support squat solved against
   the MJCF (needs no IMU: both planted feet close the chain).
 - **`k2_policy_run.py`** — runs a trained ONNX policy over the `Bus`, sim or
-  real, one code path. Rebuilds the 45-D observation byte-for-byte the way the
-  mjlab env built it at training time, reads joint order / default pose / action
-  scale from the ONNX metadata, and clamps targets to the joint limits.
+  real, one code path. Rebuilds the legacy 45-D march observation, 46-D initial
+  forward observation, or 48-D heading-aware forward observation byte-for-byte;
+  reads joint order / default pose / action scale from ONNX metadata and clamps
+  joint targets.
 - **`k2_attitude.py`** — `SimAttitude` (MuJoCo ground truth) and `ImuAttitude`
   (LSM6DS3 + adaptive complementary filter), one interface. Returns
   `(gyro, projected_gravity)`. **The gyro is returned in the MJCF `imu` SITE
@@ -246,7 +248,7 @@ python -m hardware.k2_policy_run --bus /dev/ttyAMA0 --mode march \
   --policy policies/march_hold_v4_1999.onnx --log run.csv
 ```
 
-The 45-D observation is rebuilt exactly as the mjlab env built it:
+The legacy 45-D observation is rebuilt exactly as the march env built it:
 
 ```
 [ base_ang_vel(3)      gyro, MJCF imu SITE frame
@@ -286,11 +288,14 @@ IMU response is orthogonal to what that command should produce.
   50 Hz with a 10.82 deg logged peak against a 12 deg cutoff. Minimum dynamic
   servo voltage was 11.9 V and post-run temperatures were 35--39 C.
 - Dynamic command tracking remains less accurate than the twin: worst final-run
-  knee RMS/peak error was 3.71/8.51 deg. Actuator bandwidth identification and
-  the 101.4 g twin mass correction are the next sim-to-real tasks.
-- **Open defect:** the left foot's `heel`, `inner` and `outer` sole sites are not
-  mirrors of the right foot's, which skews four reward terms against the left
-  leg. Needs the sites corrected and a retrain.
+  knee RMS/peak error was 3.71/8.51 deg. Actuator bandwidth identification is
+  still a sim-to-real task.
+- **Twin update (2026-08-15):** modeled mass now matches 1.280 kg and all five
+  left/right sole reward sites mirror within 0.001 mm. A separate low-speed
+  forward task uses a fourth gait command channel plus integrated relative-yaw
+  feedback. Its selected checkpoint (`forward_walk_v1_iter950.onnx`) measures
+  10.1--10.6 mm full-sole clearance at 0.01--0.04 m/s in nominal simulation;
+  real forward walking remains unvalidated.
 
 ---
 

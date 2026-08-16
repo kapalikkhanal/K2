@@ -34,6 +34,7 @@ def main() -> None:
 
   # Build a 1-env instance just to construct the policy graph.
   env_cfg = load_env_cfg(args.task, play=True)
+  train_env_cfg = load_env_cfg(args.task, play=False)
   env_cfg.scene.num_envs = 1
   agent_cfg = load_rl_cfg(args.task)
   env = ManagerBasedRlEnv(cfg=env_cfg, device=args.device)
@@ -51,6 +52,16 @@ def main() -> None:
     # the policy interface just like the observation and action scales.
     gait_term = env.unwrapped.command_manager.get_term("gait")
     meta["gait_frequency_hz"] = float(gait_term.cfg.gait_freq)
+    meta["gait_command_dim"] = int(gait_term.command.shape[1])
+    actor_terms = env.unwrapped.cfg.observations["actor"].terms
+    meta["heading_observation_dim"] = 2 if "heading" in actor_terms else 0
+    # The play config normally fixes commands to one convenient preview value.
+    # Deployment metadata must describe the range seen during training instead.
+    train_gait_cfg = train_env_cfg.commands["gait"]
+    if train_gait_cfg.forward_velocity_range is not None:
+      lo, hi = train_gait_cfg.forward_velocity_range
+      meta["forward_velocity_min_mps"] = float(lo)
+      meta["forward_velocity_max_mps"] = float(hi)
     attach_metadata_to_onnx(onnx_path, meta)
   except Exception as e:  # metadata is best-effort
     print(f"[WARN] metadata attach failed (onnx still valid): {e}")
