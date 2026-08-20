@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from dataclasses import asdict
 from pathlib import Path
 
@@ -48,10 +49,19 @@ def main() -> None:
   onnx_path = os.path.join(str(out_dir), args.filename)
   try:
     meta = get_base_metadata(env.unwrapped, str(ckpt))
+    # mjlab's base metadata does not currently preserve the RSL-RL iteration.
+    # Keep deployment logs unambiguous by deriving it from model_<N>.pt.
+    match = re.fullmatch(r"model_(\d+)\.pt", ckpt.name)
+    if match:
+      meta["checkpoint_iteration"] = match.group(1)
     # Deployment reconstructs the phase clock, so its frequency is part of
     # the policy interface just like the observation and action scales.
     gait_term = env.unwrapped.command_manager.get_term("gait")
     meta["gait_frequency_hz"] = float(gait_term.cfg.gait_freq)
+    meta["gait_transition_time_s"] = float(gait_term.cfg.transition_time_s)
+    meta["gait_velocity_ramp_rate_mps2"] = float(
+      gait_term.cfg.velocity_ramp_rate_mps2
+    )
     meta["gait_command_dim"] = int(gait_term.command.shape[1])
     actor_terms = env.unwrapped.cfg.observations["actor"].terms
     meta["heading_observation_dim"] = 2 if "heading" in actor_terms else 0

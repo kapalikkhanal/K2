@@ -192,6 +192,31 @@ def feet_planted(
   return torch.mean(contact, dim=1) * hold
 
 
+def hold_joint_pair_symmetry_l2(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  right_cfg: SceneEntityCfg,
+  left_cfg: SceneEntityCfg,
+) -> torch.Tensor:
+  """Keep the learned hold stance paired without prescribing its exact pose.
+
+  Corresponding K2 joint coordinates use the same physical semantics on both
+  legs (bend, outward, toe-in, and so on). Their offsets from the respective
+  defaults should therefore match in a symmetric two-foot hold. Unlike the
+  rejected exact-default-pose term, this still permits the policy to choose a
+  wider or more compliant stable stance.
+  """
+  asset: Entity = env.scene[right_cfg.name]
+  q = asset.data.joint_pos
+  d = asset.data.default_joint_pos
+  u_r = q[:, right_cfg.joint_ids] - d[:, right_cfg.joint_ids]
+  u_l = q[:, left_cfg.joint_ids] - d[:, left_cfg.joint_ids]
+  if u_r.shape[1] != u_l.shape[1]:
+    raise RuntimeError("hold symmetry requires paired right/left joint lists")
+  hold = 1.0 - env.command_manager.get_command(command_name)[:, 0]
+  return torch.sum(torch.square(u_r - u_l), dim=1) * hold
+
+
 def base_height_l2(
   env: "ManagerBasedRlEnv",
   target_height: float,

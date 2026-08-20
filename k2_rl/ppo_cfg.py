@@ -58,5 +58,9 @@ def k2_forward_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return _runner("k2_forward_v1")
 
 
+def k2_bidir_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  return _runner("k2_bidir_v1")
+
+
 def k2_full_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return _runner("k2_full_v1")

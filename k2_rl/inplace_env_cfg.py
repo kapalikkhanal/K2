@@ -477,6 +477,39 @@ def make_k2_inplace_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       weight=0.5,
       params={"sensor_name": "feet_ground_contact", "command_name": "gait"},
     ),
+    # Do not force the captured crouch during hold. Hardware/digital-twin
+    # validation showed that constraint can defeat the policy's previously
+    # stable, slightly wider learned support stance. Feet-planted plus the
+    # existing balance/posture terms reproduce the proven hold behavior.
+    "hold_pair_symmetry": RewardTermCfg(
+      func=mdp.hold_joint_pair_symmetry_l2,
+      weight=-3.0,
+      params={
+        "command_name": "gait",
+        "right_cfg": SceneEntityCfg(
+          "robot",
+          joint_names=[
+            "base_link_hip_pitch_right_joint",
+            "hip_pitch_hip_roll_right_joint",
+            "hip_roll_hip_yaw_right_joint",
+            "hip_yaw_knee_right_joint",
+            "knee_ankle_pitch_right_joint",
+            "ankle_roll_foot_right_joint",
+          ],
+        ),
+        "left_cfg": SceneEntityCfg(
+          "robot",
+          joint_names=[
+            "base_link_hip_pitch_left_joint",
+            "hip_pitch_hip_roll_left_joint",
+            "hip_roll_hip_yaw_left_joint",
+            "hip_yaw_knee_left_joint",
+            "knee_ankle_pitch_left_joint",
+            "ankle_roll_foot_left_joint",
+          ],
+        ),
+      },
+    ),
     # Penalties (both modes).
     "dof_pos_limits": RewardTermCfg(func=mdp.joint_pos_limits, weight=-2.0),
     "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.15),

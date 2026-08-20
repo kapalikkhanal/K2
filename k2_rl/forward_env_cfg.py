@@ -24,16 +24,16 @@ from k2_rl.k2_constants import FOOT_GEOMS, FOOT_SITES
 from k2_rl.mdp import GaitCommandCfg
 
 
-# Stride length at the fixed 0.75 Hz cadence is commanded velocity / 1.5 steps
-# per second, so doubling the top of the range takes the longest trained step
-# from ~2.7 cm to ~5.3 cm. Raised from (0.01, 0.04) after iteration 2000 walked
-# on hardware but covered only 12--18 cm in 30 s.
-TRAIN_FORWARD_RANGE = (0.02, 0.08)
-PLAY_FORWARD_SPEED = 0.05
-# The learned policy realizes roughly 73% of this shaped target once velocity
-# and balance terms are included.  Fifteen millimetres therefore produces the
-# required 10--12 mm measured full-sole clearance on the digital twin.
-FORWARD_SWING_HEIGHT = 0.015
+# Checkpoint 2000 was visibly cleaner than the longer-stride checkpoint 2300.
+# Keep the proven conservative range: at 0.75 Hz this asks for no more than
+# roughly 2.7 cm per alternating step.
+TRAIN_FORWARD_RANGE = (0.01, 0.04)
+PLAY_FORWARD_SPEED = 0.03
+# Hardware checkpoint 1800 lifted aggressively enough to unload the stance
+# side and provoke large ankle-roll corrections. Twelve millimetres retains
+# useful clearance over the 5 mm support-height DR while reducing single-leg
+# leverage. Validate the realized full-sole clearance before hardware export.
+FORWARD_SWING_HEIGHT = 0.012
 
 
 def make_k2_forward_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
@@ -62,8 +62,8 @@ def make_k2_forward_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   # Replace rewards that intentionally prevented translation in the march task.
   cfg.rewards["track_linear_velocity"] = RewardTermCfg(
     func=mdp.track_forward_velocity_exp,
-    weight=2.5,
-    params={"command_name": "gait", "std": 0.025},
+    weight=4.0,
+    params={"command_name": "gait", "std": 0.015},
   )
   cfg.rewards["base_lin_vel_xy"] = RewardTermCfg(
     func=mdp.base_lateral_velocity_l2,
@@ -87,20 +87,16 @@ def make_k2_forward_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     weight=-5.0,
   )
   cfg.rewards["track_angular_velocity"].weight = 1.5
-  # Keep the support polygon near the body, but allow deliberate step length.
-  # Halved alongside the longer stride range: at -0.5 this term charges four
-  # times as much for a step twice as long and would cancel the new range.
+  # Keep the support polygon near the body while permitting the conservative
+  # step length above.
   cfg.rewards["feet_under_base"].weight = -0.25
   # Iteration 2000 learned a lopsided gait: left hip pitch swung at 0.45x the
   # right in simulation and 0.31x on hardware, which is the likely source of
   # the persistent physical-left lean that needs a runtime balance trim.
   cfg.rewards["gait_symmetry"] = RewardTermCfg(
     func=mdp.gait_antisymmetry_l2,
-    # At the iteration-2000 asymmetry the error is rms 0.05 rad, so the whole
-    # term is worth ~0.0026 before weighting. -1.5 left it three orders below
-    # gait_swing and the policy simply ignored it; -6.0 makes removing the
-    # asymmetry worth about as much as the heading term.
-    weight=-6.0,
+    # Exact value used by bidir_symmetric_swing12mm_iter2500.onnx (v5).
+    weight=-4.0,
     params={
       "command_name": "gait",
       "right_cfg": SceneEntityCfg(
@@ -130,12 +126,13 @@ def make_k2_forward_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     # Instead, independently vary sole thickness and mounting angle per env.
     # On a flat plane this produces 0--3 mm unequal support and up to 1 degree
     # sole/floor mismatch, directly exercising the observed hardware failure.
-    feet_cfg = SceneEntityCfg("robot", geom_names=list(FOOT_GEOMS))
     cfg.events["sole_height"] = EventTermCfg(
       mode="startup",
       func=dr.geom_pos,
       params={
-        "asset_cfg": feet_cfg,
+        "asset_cfg": SceneEntityCfg(
+          "robot", geom_names=list(FOOT_GEOMS)
+        ),
         "operation": "add",
         "ranges": (-0.0015, 0.0015),
         "axes": [2],
@@ -146,7 +143,9 @@ def make_k2_forward_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       mode="startup",
       func=dr.geom_quat,
       params={
-        "asset_cfg": feet_cfg,
+        "asset_cfg": SceneEntityCfg(
+          "robot", geom_names=list(FOOT_GEOMS)
+        ),
         "roll_range": (-math.radians(1.0), math.radians(1.0)),
         "pitch_range": (-math.radians(1.0), math.radians(1.0)),
       },

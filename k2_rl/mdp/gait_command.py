@@ -3,19 +3,19 @@
 Emits a per-environment command the policy observes:
 
     command = [march, clock_sin, clock_cos]                 (legacy/in-place)
-    command = [march, clock_sin, clock_cos, forward_speed]  (forward task)
+    command = [march, clock_sin, clock_cos, forward_speed]  (walking tasks)
 
-  * ``march`` in {0, 1}: 0 = hold (stand still, feet planted), 1 = march
-    (step in place). A fraction ``rel_march_envs`` of environments are marching
-    each episode; the rest hold. This is the runtime "switch": one policy learns
-    both, selectable by flipping this bit (a Viser checkbox does it at play time).
+  * ``march`` ramps smoothly in [0, 1]: 0 = stable two-foot hold and 1 =
+    active gait. A binary target selects the behavior, while the observable ramp
+    avoids a command discontinuity. A fraction ``rel_march_envs`` of environments
+    target gait each episode; the rest target hold.
   * ``clock_sin/cos``: a phase clock that advances at ``gait_freq`` Hz ONLY while
     marching (frozen at 0 while holding, so the hold command is exactly
     ``[0, 0, 0]``). It gives the policy a cadence reference and lets the reward
     score an alternating L/R contact schedule (see ``mdp.rewards.gait_contact``).
-  * ``forward_speed`` is optional. When configured, it is sampled only for
-    marching environments and is exactly zero while holding. The commanded
-    speed is known on hardware, so this adds no unobservable state.
+  * ``forward_speed`` is optional and may be signed. It is rate-limited when
+    resampled and multiplied by gait activation, so it is zero in hold. The
+    commanded speed is known on hardware, so this adds no unobservable state.
 """
 
 from __future__ import annotations
@@ -41,9 +41,14 @@ class GaitCommand(CommandTerm):
   def __init__(self, cfg: "GaitCommandCfg", env: "ManagerBasedRlEnv"):
     super().__init__(cfg, env)
     self.robot: Entity = env.scene[cfg.entity_name]
+    # `march_target` is binary; `march` is the smoothly ramped value exposed to
+    # the policy and rewards. This trains the same gentle hold->walk handover
+    # used by deployment instead of an instantaneous command discontinuity.
+    self.march_target = torch.zeros(self.num_envs, device=self.device)
     self.march = torch.zeros(self.num_envs, device=self.device)
     self.phase = torch.zeros(self.num_envs, device=self.device)
     self.forward_velocity = torch.zeros(self.num_envs, device=self.device)
+    self.forward_velocity_target = torch.zeros(self.num_envs, device=self.device)
     command_dim = 4 if cfg.forward_velocity_range is not None else 3
     self._command = torch.zeros(self.num_envs, command_dim, device=self.device)
     self.metrics["march_fraction"] = torch.zeros(self.num_envs, device=self.device)
@@ -66,20 +71,43 @@ class GaitCommand(CommandTerm):
 
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     r = torch.rand(len(env_ids), device=self.device)
-    self.march[env_ids] = (r < self.cfg.rel_march_envs).float()
+    self.march_target[env_ids] = (r < self.cfg.rel_march_envs).float()
+    # v5 always began at the same double-support crossing.
     self.phase[env_ids] = 0.0
     if self.cfg.forward_velocity_range is not None:
       lo, hi = self.cfg.forward_velocity_range
-      self.forward_velocity[env_ids] = lo + (hi - lo) * torch.rand(
+      self.forward_velocity_target[env_ids] = lo + (hi - lo) * torch.rand(
         len(env_ids), device=self.device
       )
 
   def _update_command(self) -> None:
     dt = self._env.step_dt
+    if self.cfg.transition_time_s <= 0.0:
+      self.march.copy_(self.march_target)
+    else:
+      max_delta = dt / self.cfg.transition_time_s
+      self.march.add_(
+        torch.clamp(self.march_target - self.march, -max_delta, max_delta)
+      )
+    # Hold the clock at the double-support phase throughout activation. The
+    # first foot starts lifting only after the hold posture has faded smoothly.
+    phase_active = (self.march_target > 0.5) & (self.march >= 1.0 - 1e-6)
     self.phase = torch.where(
-      self.march > 0.5,
+      phase_active,
       (self.phase + 2.0 * math.pi * self.cfg.gait_freq * dt) % (2.0 * math.pi),
+      self.phase,
+    )
+    if self.cfg.forward_velocity_range is not None:
+      max_velocity_delta = self.cfg.velocity_ramp_rate_mps2 * dt
+      self.forward_velocity.add_(torch.clamp(
+        self.forward_velocity_target - self.forward_velocity,
+        -max_velocity_delta,
+        max_velocity_delta,
+      ))
+    self.phase = torch.where(
+      (self.march_target < 0.5) & (self.march <= 0.0),
       torch.zeros_like(self.phase),
+      self.phase,
     )
     self._command[:, 0] = self.march
     self._command[:, 1] = self.march * torch.sin(self.phase)
@@ -101,8 +129,7 @@ class GaitCommand(CommandTerm):
       mode = self._gui_force.value
       if mode != "auto":
         idx = self._gui_get_env_idx()
-        self.march[idx] = 1.0 if mode == "march" else 0.0
-        self._update_command()
+        self.march_target[idx] = 1.0 if mode == "march" else 0.0
 
 
 @dataclass(kw_only=True)
@@ -114,6 +141,10 @@ class GaitCommandCfg(CommandTermCfg):
   """Fraction of environments commanded to march (rest hold)."""
   forward_velocity_range: tuple[float, float] | None = None
   """Optional forward-speed range in m/s; adds a fourth command channel."""
+  transition_time_s: float = 0.5
+  """Time for the observable gait command to ramp between hold and walk."""
+  velocity_ramp_rate_mps2: float = 0.08
+  """Maximum change rate for signed forward commands, in m/s^2."""
 
   def build(self, env: "ManagerBasedRlEnv") -> GaitCommand:
     return GaitCommand(self, env)

@@ -8,8 +8,19 @@ between two behaviours **in place** (zero net translation):
 
 `Mjlab-Forward-K2` is a separate low-speed task. It retains hold/march balance
 and adds a commanded forward speed in the initial 0.01--0.04 m/s range. Its
-training scene mixes flat ground with 2 mm/5 mm roughness and gentle waves,
-while randomizing the measured hardware actuator latency and dynamics.
+training randomizes sole height/angle, friction, actuator latency, and dynamics.
+
+`Mjlab-Bidirectional-K2` is the conservative signed-speed successor. It trains
+from scratch over -0.04--+0.04 m/s, keeps hold at the captured default crouch,
+ramps both gait activation and velocity commands to prevent transition jerk,
+and randomizes up to 5 mm unequal support, ±1.5° sole mounting, and light pushes.
+Hold deliberately uses the previously proven learned support stance; it is not
+forced into the narrower captured crouch because that variant fell in the twin.
+The signed range is ±0.05 m/s, with a 0.8 s gait blend and 0.06 m/s² command
+ramp for gentler hold/walk and forward/backward transitions.
+Each gait begins at the v5 double-support crossing. Hold uses paired-joint
+symmetry without forcing the exact default crouch, and walking hip-pitch
+antisymmetry uses weight −4.
 
 `Mjlab-Full-K2` is isolated in `full_env_cfg.py`. It trains body-frame forward,
 backward, left/right, and yaw-rate commands from scratch; it does not alter the
@@ -44,6 +55,7 @@ cd ~/K2
 | `mdp/rewards.py` | gait-aware rewards: `gait_contact`, `gait_swing`, `feet_planted`, `base_height_l2`. |
 | `inplace_env_cfg.py` | the task: flat ground, zero-twist (stay in place), proprio-only actor obs (gyro + gravity + joints + gait — what the Pi can supply), domain randomization. |
 | `forward_env_cfg.py` | 1--4 cm/s forward extension; heading feedback, foam-friction randomization, and full-sole swing clearance. |
+| `bidir_env_cfg.py` | from-scratch -4--+4 cm/s forward/backward task with exact-crouch hold and smooth transitions. |
 | `full_env_cfg.py` | robust omnidirectional task: ±4 cm/s x, ±2 cm/s y, and ±0.35 rad/s yaw. |
 | `ppo_cfg.py` | PPO runner (MLP 256-128-64, 3000 iters). |
 | `tasks.py` | registers the in-place hold/march pair plus separate forward and full-locomotion tasks. |
@@ -64,6 +76,13 @@ python -m k2_rl.train Mjlab-InPlace-K2 --env.scene.num-envs 4096 \
 # Low-speed heading-aware forward walking (48-D actor observation).
 python -m k2_rl.train Mjlab-Forward-K2 --env.scene.num-envs 4096 \
     --agent.max-iterations 2000 --agent.run-name forward_v1
+
+# Forward/backward walking: train from scratch, with no --resume/load options.
+conda run --no-capture-output -n unitree_sim_env \
+  env MPLCONFIGDIR=/tmp/k2-mpl \
+  python -m k2_rl.train Mjlab-Bidirectional-K2 \
+    --env.scene.num-envs 4096 --agent.max-iterations 3000 \
+    --agent.save-interval 100 --agent.run-name bidir_short_stride_v1
 
 # Full x/y/yaw locomotion (train from scratch; do not load a forward checkpoint).
 python -m k2_rl.train Mjlab-Full-K2 --env.scene.num-envs 4096 \
@@ -120,6 +139,10 @@ python -m hardware.k2_policy_run --bus sim --viewer --mode march --policy $P
 # Forward policies only.
 python -m hardware.k2_policy_run --bus sim --viewer --mode walk \
     --forward-speed 0.01 --policy policies/forward_walk_v1_iter950.onnx
+
+# A bidirectional policy uses the same interface; negative means backward.
+python -m hardware.k2_policy_run --bus sim --viewer --mode walk \
+    --forward-speed -0.01 --policy policies/bidir_short_stride.onnx
 
 # Real robot (Pi) — calibrate first, copy policy.onnx over, keep a hand near it:
 python -m hardware.k2_policy_run --bus /dev/ttyAMA0 --mode hold  --policy $P --duration 15

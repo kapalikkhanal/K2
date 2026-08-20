@@ -271,7 +271,7 @@ class SimBus(Bus):
     def __init__(self, kp: float = DEFAULT_KP, kd: float = DEFAULT_KD,
                  latency_ticks: int = DEFAULT_LATENCY_TICKS,
                  viewer: bool = False, realtime: bool = True,
-                 ids: list[int] | None = None):
+                 ids: list[int] | None = None, key_callback=None):
         if mujoco is None:
             raise RuntimeError("SimBus needs MuJoCo, which is not installed. "
                                "On the robot use SerialBus (--bus /dev/ttyACM0).")
@@ -299,7 +299,9 @@ class SimBus(Bus):
         if viewer:
             # `import mujoco.viewer` here would rebind `mujoco` as a local.
             import mujoco.viewer as mj_viewer
-            self.viewer = mj_viewer.launch_passive(self.model, self.data)
+            self.viewer = mj_viewer.launch_passive(
+                self.model, self.data, key_callback=key_callback
+            )
 
     # -- the servo's own view of itself, in counts ---------------------------
     def read_pos_speed(self):
@@ -358,6 +360,15 @@ class SimBus(Bus):
         for k, joint in enumerate(C.SIM_ORDER):
             self.data.qpos[self._qadr[joint]] = q[k]
             self.data.ctrl[self._act[joint]] = q[k]
+        mujoco.mj_forward(self.model, self.data)
+
+    def reset(self) -> None:
+        """Reset the complete digital twin after a fall, keeping its viewer."""
+        mujoco.mj_resetData(self.model, self.data)
+        self.data.ctrl[:] = 0.0
+        self._delay.clear()
+        self._next = None
+        self._torque_on = True
         mujoco.mj_forward(self.model, self.data)
 
     def base_height(self) -> float:
@@ -422,6 +433,6 @@ def open_bus(spec: str, **kw) -> Bus:
     if spec == "sim":
         return SimBus(**{k: v for k, v in kw.items()
                          if k in ("kp", "kd", "latency_ticks", "viewer",
-                                  "realtime", "ids")})
+                                  "realtime", "ids", "key_callback")})
     return SerialBus(port=spec, **{k: v for k, v in kw.items()
                                    if k in ("baud", "ids")})

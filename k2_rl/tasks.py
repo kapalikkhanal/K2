@@ -1,4 +1,4 @@
-"""Register K2 in-place, forward, and full-locomotion tasks with mjlab.
+"""Register K2 in-place, forward, bidirectional, and full-locomotion tasks.
 
 Two task ids share ONE trained policy (same ``experiment_name`` -> same
 checkpoint). Train on ``Mjlab-InPlace-K2``; play either id to view that policy:
@@ -14,10 +14,12 @@ from mjlab.tasks.velocity.rl import VelocityOnPolicyRunner
 
 from k2_rl.inplace_env_cfg import make_k2_inplace_env_cfg
 from k2_rl.forward_env_cfg import make_k2_forward_env_cfg
+from k2_rl.bidir_env_cfg import make_k2_bidir_env_cfg
 from k2_rl.full_env_cfg import make_k2_full_env_cfg
 from k2_rl.mdp import GaitCommandCfg
 from k2_rl.ppo_cfg import (
   k2_forward_ppo_runner_cfg,
+  k2_bidir_ppo_runner_cfg,
   k2_full_ppo_runner_cfg,
   k2_inplace_ppo_runner_cfg,
 )
@@ -52,6 +54,14 @@ register_mjlab_task(
   env_cfg=make_k2_forward_env_cfg(),
   play_env_cfg=make_k2_forward_env_cfg(play=True),
   rl_cfg=k2_forward_ppo_runner_cfg(),
+  runner_cls=VelocityOnPolicyRunner,
+)
+
+register_mjlab_task(
+  task_id="Mjlab-Bidirectional-K2",
+  env_cfg=make_k2_bidir_env_cfg(),
+  play_env_cfg=make_k2_bidir_env_cfg(play=True),
+  rl_cfg=k2_bidir_ppo_runner_cfg(),
   runner_cls=VelocityOnPolicyRunner,
 )
 

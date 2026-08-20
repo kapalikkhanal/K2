@@ -59,6 +59,10 @@ def _read_metadata(sess: ort.InferenceSession):
                          dtype=np.float32)
   action_scale = float(md["action_scale"])
   gait_freq_hz = float(md.get("gait_frequency_hz", LEGACY_GAIT_FREQ_HZ))
+  gait_transition_time_s = float(md.get("gait_transition_time_s", "0.0"))
+  gait_velocity_ramp_rate_mps2 = float(
+    md.get("gait_velocity_ramp_rate_mps2", "0.08")
+  )
   checkpoint_iteration = md.get("checkpoint_iteration", "unknown")
   neutral_base_shift_m = float(md.get("neutral_base_shift_m", "nan"))
   obs_dim = int(sess.get_inputs()[0].shape[-1])
@@ -105,7 +109,8 @@ def _read_metadata(sess: ort.InferenceSession):
     )
   return (default_pos, action_scale, gait_freq_hz,
           checkpoint_iteration, neutral_base_shift_m, gait_command_dim,
-          heading_observation_dim)
+          heading_observation_dim, gait_transition_time_s,
+          gait_velocity_ramp_rate_mps2)
 
 
 SWAP_LEGS = np.array([6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5])
@@ -114,7 +119,9 @@ SWAP_LEGS = np.array([6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5])
 def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
         march_after, gait_freq_hz, approach_s=APPROACH_S,
         fall_angle_deg=12.0, log=None, swap_legs=False, forward_speed=0.03,
-        heading_observation_dim=0, balance_trim_right_deg=0.0):
+        heading_observation_dim=0, balance_trim_right_deg=0.0,
+        gait_transition_time_s=0.0, command_source=None,
+        gait_velocity_ramp_rate_mps2=0.08):
   dt = 1.0 / RATE_HZ
   iname = sess.get_inputs()[0].name
   # Route the policy's right-leg block to the other physical leg. Equivalent to
@@ -233,11 +240,31 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
     # 2) Policy loop.
     last_action = np.zeros(12, dtype=np.float32)
     phase = 0.0
+    gait_activation = 0.0
+    interactive_forward_speed = 0.0
     cmd = default_pos.copy()
     n_steps = int(duration * RATE_HZ)
     t0 = time.perf_counter()
     previous_tick_time = t0
+    ran_steps = 0
     for k in range(n_steps):
+      active_mode = mode
+      active_forward_speed = forward_speed
+      if command_source is not None:
+        active_mode, active_forward_speed, stop_requested = command_source()
+        if stop_requested:
+          print("  keyboard quit requested")
+          break
+        if active_mode not in ("hold", "march", "walk"):
+          raise UnsafeTiltError(f"invalid interactive mode: {active_mode}")
+        # Training rate-limits signed velocity resamples. Do the same here so
+        # W<->S never asks the policy or robot for an instantaneous reversal.
+        speed_target = active_forward_speed if active_mode == "walk" else 0.0
+        speed_step = gait_velocity_ramp_rate_mps2 * dt
+        interactive_forward_speed += float(np.clip(
+          speed_target - interactive_forward_speed, -speed_step, speed_step
+        ))
+      ran_steps += 1
       tick_time = time.perf_counter()
       loop_dt = tick_time - previous_tick_time
       previous_tick_time = tick_time
@@ -266,14 +293,28 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
                      else np.empty(0, np.float32))
 
       # Gait command: march from the start, or after `march_after` seconds.
-      marching = mode in ("march", "walk") and k * dt >= march_after
-      m = 1.0 if marching else 0.0
-      if marching:
-        phase = (phase + 2 * math.pi * gait_freq_hz * dt) % (2 * math.pi)
+      marching = active_mode in ("march", "walk") and k * dt >= march_after
+      gait_target = 1.0 if marching else 0.0
+      if gait_transition_time_s > 0.0:
+        activation_step = dt / gait_transition_time_s
+        gait_activation += float(np.clip(
+          gait_target - gait_activation, -activation_step, activation_step
+        ))
       else:
+        gait_activation = gait_target
+      m = gait_activation
+      # Match training: finish the smooth activation in double support, then
+      # begin the first swing from phase zero.
+      if marching and m >= 1.0 - 1e-6:
+        phase = (phase + 2 * math.pi * gait_freq_hz * dt) % (2 * math.pi)
+      elif m <= 0.0:
         phase = 0.0
       gait_values = [m, m * math.sin(phase), m * math.cos(phase)]
-      forward_command = m * forward_speed if mode == "walk" else 0.0
+      if command_source is None:
+        forward_command = (m * active_forward_speed
+                           if active_mode == "walk" else 0.0)
+      else:
+        forward_command = m * interactive_forward_speed
       expected_obs = sess.get_inputs()[0].shape[-1]
       if expected_obs in (46, 48):
         gait_values.append(forward_command)
@@ -333,14 +374,15 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
         extra = ""
         if isinstance(bus, k2_bus.SimBus):
           extra = f"  base={bus.base_height()*1000:5.1f}mm"
-        label = ("WALK " if mode == "walk" and marching
+        label = ("WALK " if active_mode == "walk" and marching
                  else "MARCH" if marching else "hold ")
         print(f"  t={k*dt:5.2f}s  {label}  "
               f"tilt={math.degrees(tilt):4.1f}deg  "
               f"|act|={np.abs(action).max():.2f}{extra}")
 
-    hz = n_steps / (time.perf_counter() - t0)
-    print(f"  ran {n_steps} policy ticks at {hz:.1f} Hz (target {RATE_HZ:.0f})")
+    hz = ran_steps / max(time.perf_counter() - t0, 1e-9)
+    print(f"  ran {ran_steps} policy ticks at {hz:.1f} Hz "
+          f"(target {RATE_HZ:.0f})")
     if tracking_errors:
       err = np.asarray(tracking_errors)
       rms = np.sqrt(np.mean(err * err, axis=0))
@@ -421,7 +463,8 @@ def main(argv=None):
   sess = ort.InferenceSession(args.policy, providers=["CPUExecutionProvider"])
   (default_pos, action_scale, policy_gait_freq, checkpoint_iteration,
    neutral_base_shift_m, gait_command_dim,
-   heading_observation_dim) = _read_metadata(sess)
+   heading_observation_dim, gait_transition_time_s,
+   gait_velocity_ramp_rate_mps2) = _read_metadata(sess)
   gait_freq_hz = (args.gait_freq if args.gait_freq is not None
                   else policy_gait_freq)
   if not 0.1 <= gait_freq_hz <= 3.0:
@@ -432,8 +475,10 @@ def main(argv=None):
     print(f"Policy neutral base shift: {neutral_base_shift_m*1000:+.1f} mm")
   print(f"Policy gait interface: {gait_command_dim}-D")
   print(f"Policy heading interface: {heading_observation_dim}-D")
-  if not 0.0 <= args.forward_speed <= 0.10:
-    raise SystemExit("--forward-speed must be between 0 and 0.10 m/s")
+  print(f"Policy gait transition: {gait_transition_time_s:g} s")
+  print(f"Policy velocity ramp: {gait_velocity_ramp_rate_mps2:g} m/s^2")
+  if not -0.10 <= args.forward_speed <= 0.10:
+    raise SystemExit("--forward-speed must be between -0.10 and +0.10 m/s")
   if not -5.0 <= args.balance_trim_right <= 5.0:
     raise SystemExit("--balance-trim-right must be between -5 and +5 degrees")
   if args.mode == "walk" and gait_command_dim != 4:
@@ -474,7 +519,8 @@ def main(argv=None):
           args.slew, args.march_after, gait_freq_hz,
           args.approach, args.fall_angle, args.log, args.swap_legs,
           args.forward_speed, heading_observation_dim,
-          args.balance_trim_right)
+          args.balance_trim_right, gait_transition_time_s, None,
+          gait_velocity_ramp_rate_mps2)
     except UnsafeTiltError as exc:
       print(f"SAFETY STOP: {exc}")
       return 2

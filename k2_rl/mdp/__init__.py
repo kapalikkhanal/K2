@@ -34,6 +34,7 @@ from k2_rl.mdp.rewards import (  # noqa: F401
   gait_antisymmetry_l2,
   gait_contact,
   gait_swing,
+  hold_joint_pair_symmetry_l2,
   swing_sole_height_spread_l2,
   track_forward_velocity_exp,
 )
