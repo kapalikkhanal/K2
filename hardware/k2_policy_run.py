@@ -6,18 +6,24 @@
     # real robot (Pi):
     python -m hardware.k2_policy_run --bus /dev/ttyAMA0 --mode hold --policy <policy.onnx>
 
-The policy is a hold/march or command-conditioned forward net from `k2_rl`.
-Its 45-D (legacy march), 46-D (initial forward), or 48-D (heading-aware
-forward) observation is rebuilt byte-for-byte the way the training environment
-built it:
+The policy is a hold/march or command-conditioned walking net from `k2_rl`.
+Its 45-D (legacy march), 46-D (initial forward), 48-D (heading-aware forward /
+bidirectional), or 49-D (turning) observation is rebuilt byte-for-byte the way
+the training environment built it:
 
     obs = [ base_ang_vel(3)      # gyro, IMU/site frame
             projected_gravity(3) # gravity dir, k2_root frame
             joint_pos_rel(12)    # q - default_pose, SIM_ORDER
             joint_vel_rel(12)    # qdot, SIM_ORDER
             last_action(12)      # previous RAW policy output
-            heading(0 or 2)      # optional [sin(relative_yaw), cos(relative_yaw)]
-            gait(3 or 4) ]       # [march, march*sin, march*cos, optional vx]
+            heading(0 or 2)      # optional [sin, cos] of the HEADING ERROR
+            gait(3, 4 or 5) ]    # [march, march*sin, march*cos, vx, wz]
+
+On a 5-D (turning) policy the heading channel is the error against a reference
+heading obtained by integrating the yaw rate this runner itself commanded --
+exactly what `k2_rl.mdp.GaitCommand` integrates during training. With no yaw
+command that reference stays at zero and the channel is the plain relative
+heading a 48-D policy expects, so the older policies run unchanged.
 
 Joint order, default pose and action scale are read from the ONNX metadata, so
 this stays correct if the policy is retrained. Actions are position targets:
@@ -63,6 +69,9 @@ def _read_metadata(sess: ort.InferenceSession):
   gait_velocity_ramp_rate_mps2 = float(
     md.get("gait_velocity_ramp_rate_mps2", "0.08")
   )
+  gait_yaw_rate_ramp_rate_rps2 = float(
+    md.get("gait_yaw_rate_ramp_rate_rps2", "0.30")
+  )
   checkpoint_iteration = md.get("checkpoint_iteration", "unknown")
   neutral_base_shift_m = float(md.get("neutral_base_shift_m", "nan"))
   obs_dim = int(sess.get_inputs()[0].shape[-1])
@@ -72,6 +81,8 @@ def _read_metadata(sess: ort.InferenceSession):
     inferred_heading_dim, inferred_gait_dim = 0, 4
   elif obs_dim == 48:
     inferred_heading_dim, inferred_gait_dim = 2, 4
+  elif obs_dim == 49:
+    inferred_heading_dim, inferred_gait_dim = 2, 5
   else:
     raise SystemExit(f"unsupported policy observation size: {obs_dim}")
   gait_command_dim = int(md.get("gait_command_dim", inferred_gait_dim))
@@ -95,7 +106,7 @@ def _read_metadata(sess: ort.InferenceSession):
     raise SystemExit(f"policy default pose exceeds joint limits: {outside}")
   if not 0.0 < action_scale <= 0.5:
     raise SystemExit(f"unsafe policy action scale: {action_scale:g}")
-  if gait_command_dim not in (3, 4) or gait_command_dim != inferred_gait_dim:
+  if gait_command_dim not in (3, 4, 5) or gait_command_dim != inferred_gait_dim:
     raise SystemExit(
       f"unsupported/inconsistent gait interface: metadata={gait_command_dim}, "
       f"observation implies {inferred_gait_dim}"
@@ -110,7 +121,7 @@ def _read_metadata(sess: ort.InferenceSession):
   return (default_pos, action_scale, gait_freq_hz,
           checkpoint_iteration, neutral_base_shift_m, gait_command_dim,
           heading_observation_dim, gait_transition_time_s,
-          gait_velocity_ramp_rate_mps2)
+          gait_velocity_ramp_rate_mps2, gait_yaw_rate_ramp_rate_rps2)
 
 
 SWAP_LEGS = np.array([6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5])
@@ -121,7 +132,8 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
         fall_angle_deg=12.0, log=None, swap_legs=False, forward_speed=0.03,
         heading_observation_dim=0, balance_trim_right_deg=0.0,
         gait_transition_time_s=0.0, command_source=None,
-        gait_velocity_ramp_rate_mps2=0.08):
+        gait_velocity_ramp_rate_mps2=0.08, yaw_rate=0.0,
+        gait_yaw_rate_ramp_rate_rps2=0.30):
   dt = 1.0 / RATE_HZ
   iname = sess.get_inputs()[0].name
   # Route the policy's right-leg block to the other physical leg. Equivalent to
@@ -207,7 +219,8 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
     if log is None or not rows:
       return
     header = ["t", "t_nominal", "loop_dt", "march", "phase",
-              "forward_command", "base_x", "base_y", "base_z", "base_heading",
+              "forward_command", "yaw_command", "heading_reference",
+              "base_x", "base_y", "base_z", "base_heading",
               "heading_sin", "heading_cos", "tilt",
               "gyro_x", "gyro_y", "gyro_z",
               "gravity_x", "gravity_y", "gravity_z",
@@ -242,6 +255,11 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
     phase = 0.0
     gait_activation = 0.0
     interactive_forward_speed = 0.0
+    interactive_yaw_rate = 0.0
+    # Reference heading the commanded yaw rate asks the robot to face. Training
+    # integrates exactly this from the same emitted command, so a 5-D policy
+    # sees the same near-zero heading error here that it saw in simulation.
+    heading_reference = 0.0
     cmd = default_pos.copy()
     n_steps = int(duration * RATE_HZ)
     t0 = time.perf_counter()
@@ -250,19 +268,28 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
     for k in range(n_steps):
       active_mode = mode
       active_forward_speed = forward_speed
+      active_yaw_rate = yaw_rate
       if command_source is not None:
-        active_mode, active_forward_speed, stop_requested = command_source()
+        (active_mode, active_forward_speed, active_yaw_rate,
+         stop_requested) = command_source()
         if stop_requested:
           print("  keyboard quit requested")
           break
         if active_mode not in ("hold", "march", "walk"):
           raise UnsafeTiltError(f"invalid interactive mode: {active_mode}")
-        # Training rate-limits signed velocity resamples. Do the same here so
-        # W<->S never asks the policy or robot for an instantaneous reversal.
+        # Training rate-limits signed command resamples. Do the same here so
+        # W<->S and A<->D never ask the policy or the robot for an
+        # instantaneous reversal.
         speed_target = active_forward_speed if active_mode == "walk" else 0.0
         speed_step = gait_velocity_ramp_rate_mps2 * dt
         interactive_forward_speed += float(np.clip(
           speed_target - interactive_forward_speed, -speed_step, speed_step
+        ))
+        yaw_target = (active_yaw_rate
+                      if active_mode in ("march", "walk") else 0.0)
+        yaw_step = gait_yaw_rate_ramp_rate_rps2 * dt
+        interactive_yaw_rate += float(np.clip(
+          yaw_target - interactive_yaw_rate, -yaw_step, yaw_step
         ))
       ran_steps += 1
       tick_time = time.perf_counter()
@@ -289,9 +316,6 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
       policy_grav = proj_grav.copy()
       policy_grav[1] = trim_cos * proj_grav[1] - trim_sin * proj_grav[2]
       policy_grav[2] = trim_sin * proj_grav[1] + trim_cos * proj_grav[2]
-      heading_obs = (att.heading_sin_cos() if heading_observation_dim == 2
-                     else np.empty(0, np.float32))
-
       # Gait command: march from the start, or after `march_after` seconds.
       marching = active_mode in ("march", "walk") and k * dt >= march_after
       gait_target = 1.0 if marching else 0.0
@@ -313,12 +337,34 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
       if command_source is None:
         forward_command = (m * active_forward_speed
                            if active_mode == "walk" else 0.0)
+        yaw_command = (m * active_yaw_rate
+                       if active_mode in ("march", "walk") else 0.0)
       else:
         forward_command = m * interactive_forward_speed
+        yaw_command = m * interactive_yaw_rate
       expected_obs = sess.get_inputs()[0].shape[-1]
-      if expected_obs in (46, 48):
+      if expected_obs in (46, 48, 49):
         gait_values.append(forward_command)
+      if expected_obs == 49:
+        gait_values.append(yaw_command)
+      else:
+        # A policy without a yaw channel cannot be steered; keep the reference
+        # pinned so its heading observation stays the plain relative heading.
+        yaw_command = 0.0
       gait = np.asarray(gait_values, np.float32)
+
+      # Advance the reference heading with the command just emitted, then read
+      # the heading error against it -- the same order as training, where
+      # GaitCommand integrates the reference at the end of its command update
+      # and the observation manager runs immediately afterwards.
+      heading_reference += yaw_command * dt
+      heading_reference = (heading_reference + math.pi) % (2 * math.pi) - math.pi
+      if heading_observation_dim == 2:
+        heading_error = att.relative_heading() - heading_reference
+        heading_obs = np.array(
+          [math.sin(heading_error), math.cos(heading_error)], np.float32)
+      else:
+        heading_obs = np.empty(0, np.float32)
 
       obs_parts = [
         gyro.astype(np.float32),          # base_ang_vel
@@ -364,7 +410,8 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
       if log is not None:
         rows.append(np.concatenate([
           [time.perf_counter() - t0, k * dt, loop_dt, float(m), phase,
-           forward_command, *base_position, base_heading,
+           forward_command, yaw_command, heading_reference,
+           *base_position, base_heading,
            *(heading_obs if len(heading_obs) else (np.nan, np.nan)), tilt],
           gyro, proj_grav, policy_grav, action, cmd, q, qd, tracking_error,
           *telemetry_arrays,
@@ -376,9 +423,10 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
           extra = f"  base={bus.base_height()*1000:5.1f}mm"
         label = ("WALK " if active_mode == "walk" and marching
                  else "MARCH" if marching else "hold ")
+        turn = f"  wz={yaw_command:+.2f}" if expected_obs == 49 else ""
         print(f"  t={k*dt:5.2f}s  {label}  "
               f"tilt={math.degrees(tilt):4.1f}deg  "
-              f"|act|={np.abs(action).max():.2f}{extra}")
+              f"|act|={np.abs(action).max():.2f}{turn}{extra}")
 
     hz = ran_steps / max(time.perf_counter() - t0, 1e-9)
     print(f"  ran {ran_steps} policy ticks at {hz:.1f} Hz "
@@ -439,6 +487,10 @@ def main(argv=None):
                   help="override policy gait clock frequency (normally ONNX metadata)")
   ap.add_argument("--forward-speed", type=float, default=0.03,
                   help="commanded m/s for mode=walk (forward policy only; default 0.03)")
+  ap.add_argument("--yaw-rate", type=float, default=0.0,
+                  help="commanded body yaw rate in rad/s, positive = turn left; "
+                       "applies in mode=march (turn in place) and mode=walk "
+                       "(walk an arc). Turning policies only.")
   ap.add_argument("--duration", type=float, default=20.0,
                   help="seconds of policy control")
   ap.add_argument("--approach", type=float, default=APPROACH_S,
@@ -464,7 +516,8 @@ def main(argv=None):
   (default_pos, action_scale, policy_gait_freq, checkpoint_iteration,
    neutral_base_shift_m, gait_command_dim,
    heading_observation_dim, gait_transition_time_s,
-   gait_velocity_ramp_rate_mps2) = _read_metadata(sess)
+   gait_velocity_ramp_rate_mps2,
+   gait_yaw_rate_ramp_rate_rps2) = _read_metadata(sess)
   gait_freq_hz = (args.gait_freq if args.gait_freq is not None
                   else policy_gait_freq)
   if not 0.1 <= gait_freq_hz <= 3.0:
@@ -477,12 +530,20 @@ def main(argv=None):
   print(f"Policy heading interface: {heading_observation_dim}-D")
   print(f"Policy gait transition: {gait_transition_time_s:g} s")
   print(f"Policy velocity ramp: {gait_velocity_ramp_rate_mps2:g} m/s^2")
+  if gait_command_dim == 5:
+    print(f"Policy yaw ramp: {gait_yaw_rate_ramp_rate_rps2:g} rad/s^2")
   if not -0.10 <= args.forward_speed <= 0.10:
     raise SystemExit("--forward-speed must be between -0.10 and +0.10 m/s")
+  # Same spirit as the forward guard: refuse a command well outside any trained
+  # yaw range before the robot ever moves.
+  if not -0.35 <= args.yaw_rate <= 0.35:
+    raise SystemExit("--yaw-rate must be between -0.35 and +0.35 rad/s")
   if not -5.0 <= args.balance_trim_right <= 5.0:
     raise SystemExit("--balance-trim-right must be between -5 and +5 degrees")
-  if args.mode == "walk" and gait_command_dim != 4:
+  if args.mode == "walk" and gait_command_dim not in (4, 5):
     raise SystemExit("mode=walk requires a command-conditioned forward policy")
+  if args.yaw_rate != 0.0 and gait_command_dim != 5:
+    raise SystemExit("--yaw-rate requires a turning policy (5-D gait command)")
 
   if args.swap_legs:
     print("DIAGNOSTIC: swapping policy right/left joint blocks; servo IDs and "
@@ -520,7 +581,8 @@ def main(argv=None):
           args.approach, args.fall_angle, args.log, args.swap_legs,
           args.forward_speed, heading_observation_dim,
           args.balance_trim_right, gait_transition_time_s, None,
-          gait_velocity_ramp_rate_mps2)
+          gait_velocity_ramp_rate_mps2, args.yaw_rate,
+          gait_yaw_rate_ramp_rate_rps2)
     except UnsafeTiltError as exc:
       print(f"SAFETY STOP: {exc}")
       return 2

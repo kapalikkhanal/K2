@@ -62,6 +62,9 @@ def main() -> None:
     meta["gait_velocity_ramp_rate_mps2"] = float(
       gait_term.cfg.velocity_ramp_rate_mps2
     )
+    meta["gait_yaw_rate_ramp_rate_rps2"] = float(
+      gait_term.cfg.yaw_rate_ramp_rate_rps2
+    )
     meta["gait_command_dim"] = int(gait_term.command.shape[1])
     actor_terms = env.unwrapped.cfg.observations["actor"].terms
     meta["heading_observation_dim"] = 2 if "heading" in actor_terms else 0
@@ -72,6 +75,10 @@ def main() -> None:
       lo, hi = train_gait_cfg.forward_velocity_range
       meta["forward_velocity_min_mps"] = float(lo)
       meta["forward_velocity_max_mps"] = float(hi)
+    if train_gait_cfg.yaw_rate_range is not None:
+      lo, hi = train_gait_cfg.yaw_rate_range
+      meta["yaw_rate_min_rps"] = float(lo)
+      meta["yaw_rate_max_rps"] = float(hi)
     attach_metadata_to_onnx(onnx_path, meta)
   except Exception as e:  # metadata is best-effort
     print(f"[WARN] metadata attach failed (onnx still valid): {e}")

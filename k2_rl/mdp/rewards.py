@@ -285,6 +285,8 @@ def gait_antisymmetry_l2(
   command_name: str,
   right_cfg: SceneEntityCfg,
   left_cfg: SceneEntityCfg,
+  yaw_command_index: int | None = None,
+  yaw_fade_std: float = 0.12,
 ) -> torch.Tensor:
   """Penalize a left/right mismatch in sagittal swing amplitude.
 
@@ -298,14 +300,25 @@ def gait_antisymmetry_l2(
   Intended for hip pitch only. Knee and ankle pitch swing as once-per-step
   pulses whose antiphase sum is a nonzero constant, so the same penalty would
   fight their normal shape.
+
+  A turning gait is genuinely asymmetric -- the inside leg takes the shorter
+  step -- so pass ``yaw_command_index`` on a task that commands yaw and the
+  penalty fades smoothly as the commanded yaw rate grows. Left unset (the
+  default) the term is exactly the straight-walking penalty it has always been.
   """
   asset: Entity = env.scene[right_cfg.name]
   q = asset.data.joint_pos
   d = asset.data.default_joint_pos
   u_r = (q[:, right_cfg.joint_ids] - d[:, right_cfg.joint_ids]).sum(dim=1)
   u_l = (q[:, left_cfg.joint_ids] - d[:, left_cfg.joint_ids]).sum(dim=1)
-  march = env.command_manager.get_command(command_name)[:, 0]
-  return march * torch.square(u_r + u_l)
+  command = env.command_manager.get_command(command_name)
+  march = command[:, 0]
+  cost = march * torch.square(u_r + u_l)
+  if yaw_command_index is not None:
+    cost = cost * torch.exp(
+      -torch.square(command[:, yaw_command_index]) / (yaw_fade_std**2)
+    )
+  return cost
 
 
 def base_heading_error(
@@ -392,3 +405,118 @@ def feet_lateral_clearance_l2(
     (minimum_separation - lateral_gap) / minimum_separation, min=0.0
   )
   return torch.square(violation)
+
+
+##
+# Turning: the straight-line terms above measure against world +X and the world
+# +Y spawn line, which is only correct when no yaw is commanded. Each function
+# below measures the same physical quantity against the gait command's own
+# reference instead, and reduces EXACTLY to its predecessor when the commanded
+# yaw rate is identically zero.
+##
+
+
+def _gait_reference(env: "ManagerBasedRlEnv", command_name: str):
+  """The gait term carrying the integrated reference pose."""
+  term = env.command_manager.get_term(command_name)
+  if not hasattr(term, "heading_ref"):
+    raise RuntimeError(
+      f"command '{command_name}' does not integrate a reference pose; "
+      "these rewards require k2_rl.mdp.GaitCommand with a forward channel"
+    )
+  return term
+
+
+def yaw_rate_error_l2(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  yaw_command_index: int = 4,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Quadratic penalty on yaw rate *in excess of* the commanded yaw rate.
+
+  Drop-in replacement for :func:`base_yaw_rate_l2`: with a zero yaw command the
+  two are the same expression, so straight walking is damped exactly as before.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  error = asset.data.root_link_ang_vel_b[:, 2] - command[:, yaw_command_index]
+  return torch.square(error)
+
+
+def track_yaw_rate_exp(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  std: float,
+  yaw_command_index: int = 4,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Reward tracking the commanded yaw rate while keeping roll/pitch rate low.
+
+  Same kernel and same roll/pitch treatment as mjlab's ``track_angular_velocity``
+  but reading the yaw target from the gait command rather than from the twist
+  command, which the walking tasks pin to zero.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  actual = asset.data.root_link_ang_vel_b
+  z_error = torch.square(command[:, yaw_command_index] - actual[:, 2])
+  xy_error = torch.sum(torch.square(actual[:, :2]), dim=1)
+  return torch.exp(-(z_error + xy_error) / std**2)
+
+
+def heading_reference_error(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Wrap-safe cost for deviation from the commanded (integrated) heading.
+
+  Reduces to :func:`base_heading_error` whenever the reference never rotates.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  term = _gait_reference(env, command_name)
+  return 1.0 - torch.cos(asset.data.heading_w - term.heading_ref)
+
+
+def lateral_path_deviation_l2(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Penalize drift perpendicular to the commanded path, not forward progress.
+
+  The reference pose starts on the environment origin facing world +X, so with
+  no yaw command this is identically ``(y - y_origin)**2`` -- exactly
+  :func:`base_lateral_position_l2`. With yaw commanded the corridor turns with
+  the command instead of pinning the robot to the world +X axis.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  term = _gait_reference(env, command_name)
+  delta = asset.data.root_link_pos_w[:, :2] - term.pos_ref
+  heading = term.heading_ref
+  lateral = -delta[:, 0] * torch.sin(heading) + delta[:, 1] * torch.cos(heading)
+  return torch.square(lateral)
+
+
+def feet_lateral_vel_body_l2(
+  env: "ManagerBasedRlEnv",
+  asset_cfg: SceneEntityCfg,
+) -> torch.Tensor:
+  """Body-frame version of :func:`feet_lateral_vel_l2`.
+
+  The world-frame term reads ``site_lin_vel_w[..., 1]``, which stops meaning
+  "sideways" as soon as the robot is allowed to turn away from world +X. Rotating
+  the foot velocity into the root frame first keeps the same intent -- permit
+  fore/aft swing, penalize sideways scuffing -- at any heading.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  v_w = asset.data.site_lin_vel_w[:, asset_cfg.site_ids, :]  # [B, F, 3]
+  num_sites = v_w.shape[1]
+  quat = (
+    asset.data.root_link_quat_w[:, None, :]
+    .expand(-1, num_sites, -1)
+    .reshape(-1, 4)
+  )
+  v_b = quat_apply_inverse(quat, v_w.reshape(-1, 3)).view(-1, num_sites, 3)
+  return torch.sum(torch.square(v_b[..., 1]), dim=1)

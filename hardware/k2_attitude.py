@@ -70,8 +70,13 @@ class SimAttitude:
     def attitude(self):
         return self.bus.true_base_state()
 
-    def heading_sin_cos(self) -> np.ndarray:
+    def relative_heading(self) -> float:
+        """Relative yaw since construction, radians, wrapped to [-pi, pi]."""
         heading = float(self.bus.base_heading() or 0.0) - self.initial_heading
+        return float((heading + np.pi) % (2.0 * np.pi) - np.pi)
+
+    def heading_sin_cos(self) -> np.ndarray:
+        heading = self.relative_heading()
         return np.array([np.sin(heading), np.cos(heading)], dtype=np.float32)
 
     def close(self):
@@ -164,6 +169,10 @@ class ImuAttitude:
         ) - np.pi
         gyro_nominal = R_SITE_TO_ROOT.T @ gyro_root
         return gyro_nominal.astype(np.float32), proj_grav_b.astype(np.float32)
+
+    def relative_heading(self) -> float:
+        """Relative yaw since construction, radians, wrapped to [-pi, pi]."""
+        return float(self.heading)
 
     def heading_sin_cos(self) -> np.ndarray:
         return np.array(

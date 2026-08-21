@@ -14,7 +14,10 @@ from k2_rl.mdp.actions import (  # noqa: F401
   DelayedJointPositionActionCfg,
 )
 from k2_rl.mdp.gait_command import GaitCommand, GaitCommandCfg  # noqa: F401
-from k2_rl.mdp.observations import heading_sin_cos  # noqa: F401
+from k2_rl.mdp.observations import (  # noqa: F401
+  heading_error_sin_cos,
+  heading_sin_cos,
+)
 from k2_rl.mdp.rewards import (  # noqa: F401
   action_rate_soft_limit_l2,
   base_ang_vel_xy_l2,
@@ -28,13 +31,18 @@ from k2_rl.mdp.rewards import (  # noqa: F401
   base_xy_position_l2,
   feet_planted,
   feet_lateral_clearance_l2,
+  feet_lateral_vel_body_l2,
   feet_lateral_vel_l2,
   feet_under_base_l2,
   feet_xy_vel_l2,
   gait_antisymmetry_l2,
   gait_contact,
   gait_swing,
+  heading_reference_error,
   hold_joint_pair_symmetry_l2,
+  lateral_path_deviation_l2,
   swing_sole_height_spread_l2,
   track_forward_velocity_exp,
+  track_yaw_rate_exp,
+  yaw_rate_error_l2,
 )

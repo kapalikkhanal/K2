@@ -62,5 +62,9 @@ def k2_bidir_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return _runner("k2_bidir_v1")
 
 
+def k2_turn_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  return _runner("k2_turn_v1")
+
+
 def k2_full_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   return _runner("k2_full_v1")
