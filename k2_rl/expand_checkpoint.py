@@ -40,6 +40,8 @@ from mjlab.tasks.registry import load_env_cfg, load_rl_cfg
 
 
 def _gait_command_dim(gait_cfg) -> int:
+  if getattr(gait_cfg, "height_offset_range", None) is not None:
+    return 6
   if getattr(gait_cfg, "yaw_rate_range", None) is not None:
     return 5
   if gait_cfg.forward_velocity_range is not None:
@@ -59,6 +61,21 @@ def _yaw_channel_std(gait_cfg) -> float:
   second_moment = (lo * lo + lo * hi + hi * hi) / 3.0
   active = gait_cfg.rel_march_envs * gait_cfg.rel_turning_envs
   return math.sqrt(max(active * second_moment, 1e-12))
+
+
+def _height_channel_std(gait_cfg) -> float:
+  """Standard deviation of the emitted ``(1 - march) * height_offset`` channel.
+
+  Gated by HOLD, the mirror of vx/wz, so the active fraction is
+  ``1 - rel_march_envs``. The range is not symmetric about zero, so keep the
+  mean term rather than dropping it.
+  """
+  lo, hi = gait_cfg.height_offset_range
+  mean = 0.5 * (lo + hi)
+  second = (lo * lo + lo * hi + hi * hi) / 3.0
+  active = 1.0 - gait_cfg.rel_march_envs
+  var = active * second - (active * mean) ** 2
+  return math.sqrt(max(var, 1e-12))
 
 
 def _widen_linear(weight: torch.Tensor, added: int, fill: float) -> torch.Tensor:
@@ -162,6 +179,9 @@ def main() -> None:
 
   if args.new_obs_std is not None:
     new_std = args.new_obs_std
+  elif added == 1 and getattr(gait_cfg, "height_offset_range", None) is not None \
+      and args.source_gait_dim == 5:
+    new_std = _height_channel_std(gait_cfg)
   elif added == 1 and getattr(gait_cfg, "yaw_rate_range", None) is not None:
     new_std = _yaw_channel_std(gait_cfg)
   else:

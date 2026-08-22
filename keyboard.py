@@ -10,6 +10,7 @@ Keys are captured by the MuJoCo viewer window:
   A  turn left      (from hold this starts a turn in place)
   D  turn right
   X  straighten -- cancel the yaw command, keep the current mode
+  C  crouch deeper (hold only)   V  rise      Z  back to nominal height
   Q / Escape  quit
 
 A/D/X do nothing on a policy without a yaw channel; the runner refuses to feed
@@ -37,12 +38,17 @@ from hardware.k2_stabilizer import UnsafeTiltError
 
 ROOT = Path(__file__).resolve().parent
 class KeyboardCommand:
-  def __init__(self, speed: float, yaw_rate: float, turning: bool):
+  def __init__(self, speed: float, yaw_rate: float, turning: bool,
+               crouching: bool = False):
     self.mode = "hold"
     self.speed = speed
     self.yaw_magnitude = abs(yaw_rate)
     self.turning = turning
+    self.crouching = crouching
     self.yaw = 0.0
+    self.height = 0.0
+    self.crouch_step = 0.015
+    self.crouch_min = -0.045
     self.stop_requested = False
 
   def _set_yaw(self, sign: int, label: str) -> None:
@@ -79,12 +85,25 @@ class KeyboardCommand:
     elif key == "x":
       self.yaw = 0.0
       print("\n[X] STRAIGHT")
+    elif key in ("c", "v", "z") and not self.crouching:
+      print("\n[!] this policy has no height channel; ignoring")
+    elif key == "c":
+      self.height = max(self.height - self.crouch_step, self.crouch_min)
+      print(f"\n[C] CROUCH {self.height*1000:+.0f} mm"
+            + ("" if self.mode == "hold" else "  (applies in HOLD)"))
+    elif key == "v":
+      self.height = min(self.height + self.crouch_step, 0.006)
+      print(f"\n[V] RISE {self.height*1000:+.0f} mm"
+            + ("" if self.mode == "hold" else "  (applies in HOLD)"))
+    elif key == "z":
+      self.height = 0.0
+      print("\n[Z] NOMINAL HEIGHT")
     elif key == "q" or keycode == 256:  # GLFW_KEY_ESCAPE
       self.stop_requested = True
       print("\n[Q] QUIT")
 
-  def snapshot(self) -> tuple[str, float, float, bool]:
-    return self.mode, self.speed, self.yaw, self.stop_requested
+  def snapshot(self) -> tuple[str, float, float, float, bool]:
+    return self.mode, self.speed, self.yaw, self.height, self.stop_requested
 
 
 def _default_policy() -> Path:
@@ -125,13 +144,14 @@ def main() -> int:
   session = ort.InferenceSession(str(policy), providers=["CPUExecutionProvider"])
   (default_pos, action_scale, gait_freq, checkpoint, neutral_shift,
    gait_dim, heading_dim, transition_time, velocity_ramp,
-   yaw_ramp) = _read_metadata(session)
-  if gait_dim not in (4, 5):
+   yaw_ramp, height_ramp) = _read_metadata(session)
+  if gait_dim not in (4, 5, 6):
     raise SystemExit(
       f"{policy.name} is not signed-speed conditioned (gait dimension {gait_dim})"
     )
 
-  controller = KeyboardCommand(args.speed, args.yaw_rate, gait_dim == 5)
+  controller = KeyboardCommand(args.speed, args.yaw_rate,
+                                gait_dim in (5, 6), gait_dim == 6)
   bus = k2_bus.open_bus(
     "sim", viewer=True, realtime=True, key_callback=controller.on_key
   )
@@ -144,8 +164,10 @@ def main() -> int:
   print(f"Checkpoint: {checkpoint}; gait: {gait_freq:g} Hz; "
         f"transition: {transition_time:g} s; ramp: {velocity_ramp:g} m/s^2")
   keys = "H=hold  M=march  W=forward  S=backward"
-  if gait_dim == 5:
+  if gait_dim in (5, 6):
     keys += "  A=left  D=right  X=straight"
+  if gait_dim == 6:
+    keys += "  C=crouch  V=rise  Z=nominal"
   print(f"Click the MuJoCo window, then press: {keys}  Q/Esc=quit")
   print("Starting safely in HOLD.")
 
@@ -164,6 +186,7 @@ def main() -> int:
           command_source=controller.snapshot,
           gait_velocity_ramp_rate_mps2=velocity_ramp,
           gait_yaw_rate_ramp_rate_rps2=yaw_ramp,
+          gait_height_ramp_rate_mps=height_ramp,
         )
       except UnsafeTiltError as exc:
         print(f"\nSIM FALL: {exc}")

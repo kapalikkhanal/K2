@@ -5,6 +5,7 @@ Emits a per-environment command the policy observes:
     command = [march, clock_sin, clock_cos]                      (legacy/in-place)
     command = [march, clock_sin, clock_cos, vx]                  (walking tasks)
     command = [march, clock_sin, clock_cos, vx, wz]              (turning task)
+    command = [march, clock_sin, clock_cos, vx, wz, dh]          (+ crouch)
 
   * ``march`` ramps smoothly in [0, 1]: 0 = stable two-foot hold and 1 =
     active gait. A binary target selects the behavior, while the observable ramp
@@ -22,6 +23,13 @@ Emits a per-environment command the policy observes:
     ``rel_turning_envs`` of marching environments receive a nonzero yaw command,
     so straight walking stays a well-represented mode rather than a measure-zero
     slice of a uniform range.
+
+  * ``dh`` is optional and requires ``wz``. It is a commanded base-height OFFSET
+    from the nominal crouch, gated by ``(1 - march)`` -- the MIRROR of how vx and
+    wz are gated -- so it is the offset while holding and exactly zero while
+    walking. That is deliberate: crouch is a standing behaviour, and a policy
+    warm-started with a zero weight column on this channel keeps its walking
+    gait bit-identical because the channel reads zero there.
 
 Whenever ``vx`` is configured the term also integrates a **reference pose** --
 ``heading_ref`` and ``pos_ref`` -- from the commands it emits. That reference is
@@ -62,6 +70,11 @@ class GaitCommand(CommandTerm):
         "GaitCommandCfg.yaw_rate_range requires forward_velocity_range so the "
         "command channel indices stay fixed (vx is channel 3, wz is channel 4)"
       )
+    if cfg.height_offset_range is not None and cfg.yaw_rate_range is None:
+      raise ValueError(
+        "GaitCommandCfg.height_offset_range requires yaw_rate_range so the "
+        "command channel indices stay fixed (dh is channel 5)"
+      )
     # `march_target` is binary; `march` is the smoothly ramped value exposed to
     # the policy and rewards. This trains the same gentle hold->walk handover
     # used by deployment instead of an instantaneous command discontinuity.
@@ -72,6 +85,8 @@ class GaitCommand(CommandTerm):
     self.forward_velocity_target = torch.zeros(self.num_envs, device=self.device)
     self.yaw_rate = torch.zeros(self.num_envs, device=self.device)
     self.yaw_rate_target = torch.zeros(self.num_envs, device=self.device)
+    self.height_offset = torch.zeros(self.num_envs, device=self.device)
+    self.height_offset_target = torch.zeros(self.num_envs, device=self.device)
     # Reference pose the emitted command asks the robot to follow.
     self.heading_ref = torch.zeros(self.num_envs, device=self.device)
     self.pos_ref = torch.zeros(self.num_envs, 2, device=self.device)
@@ -80,6 +95,8 @@ class GaitCommand(CommandTerm):
       command_dim = 4
     if cfg.yaw_rate_range is not None:
       command_dim = 5
+    if cfg.height_offset_range is not None:
+      command_dim = 6
     self._command = torch.zeros(self.num_envs, command_dim, device=self.device)
     self.metrics["march_fraction"] = torch.zeros(self.num_envs, device=self.device)
     if cfg.forward_velocity_range is not None:
@@ -88,6 +105,10 @@ class GaitCommand(CommandTerm):
       )
     if cfg.yaw_rate_range is not None:
       self.metrics["mean_abs_yaw_command"] = torch.zeros(
+        self.num_envs, device=self.device
+      )
+    if cfg.height_offset_range is not None:
+      self.metrics["mean_height_command"] = torch.zeros(
         self.num_envs, device=self.device
       )
     # Play-mode GUI override.
@@ -115,6 +136,10 @@ class GaitCommand(CommandTerm):
       self.metrics["mean_forward_command"] = self.march * self.forward_velocity
     if self.cfg.yaw_rate_range is not None:
       self.metrics["mean_abs_yaw_command"] = torch.abs(self.march * self.yaw_rate)
+    if self.cfg.height_offset_range is not None:
+      self.metrics["mean_height_command"] = (
+        (1.0 - self.march) * self.height_offset
+      )
 
   def _resample_command(self, env_ids: torch.Tensor) -> None:
     r = torch.rand(len(env_ids), device=self.device)
@@ -136,6 +161,11 @@ class GaitCommand(CommandTerm):
         torch.rand(len(env_ids), device=self.device) < self.cfg.rel_turning_envs
       ).float()
       self.yaw_rate_target[env_ids] = sampled * turning
+    if self.cfg.height_offset_range is not None:
+      lo, hi = self.cfg.height_offset_range
+      self.height_offset_target[env_ids] = lo + (hi - lo) * torch.rand(
+        len(env_ids), device=self.device
+      )
 
   def _update_command(self) -> None:
     dt = self._env.step_dt
@@ -166,6 +196,11 @@ class GaitCommand(CommandTerm):
       self.yaw_rate.add_(torch.clamp(
         self.yaw_rate_target - self.yaw_rate, -max_yaw_delta, max_yaw_delta
       ))
+    if self.cfg.height_offset_range is not None:
+      max_h = self.cfg.height_ramp_rate_mps * dt
+      self.height_offset.add_(torch.clamp(
+        self.height_offset_target - self.height_offset, -max_h, max_h
+      ))
     self.phase = torch.where(
       (self.march_target < 0.5) & (self.march <= 0.0),
       torch.zeros_like(self.phase),
@@ -178,6 +213,10 @@ class GaitCommand(CommandTerm):
       self._command[:, 3] = self.march * self.forward_velocity
     if self.cfg.yaw_rate_range is not None:
       self._command[:, 4] = self.march * self.yaw_rate
+    if self.cfg.height_offset_range is not None:
+      # Gated by (1 - march): crouch belongs to standing, and this keeps the
+      # channel at exactly zero while walking.
+      self._command[:, 5] = (1.0 - self.march) * self.height_offset
     if self.cfg.forward_velocity_range is not None:
       self._integrate_reference(dt)
 
@@ -243,6 +282,14 @@ class GaitCommandCfg(CommandTermCfg):
   """Maximum change rate for signed forward commands, in m/s^2."""
   yaw_rate_ramp_rate_rps2: float = 0.30
   """Maximum change rate for signed yaw-rate commands, in rad/s^2."""
+  height_offset_range: tuple[float, float] | None = None
+  """Optional base-height offset range in m; adds a sixth command channel.
+
+  Requires ``yaw_rate_range`` so channel indices never shift. Gated by
+  ``(1 - march)``: active while holding, exactly zero while walking.
+  """
+  height_ramp_rate_mps: float = 0.03
+  """Maximum change rate for the height command, in m/s."""
 
   def build(self, env: "ManagerBasedRlEnv") -> GaitCommand:
     return GaitCommand(self, env)

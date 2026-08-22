@@ -10,6 +10,7 @@ Keys are read directly from the terminal (no Enter required):
   A  turn left      (from hold this starts a turn in place)
   D  turn right
   X  straighten -- cancel the yaw command, keep the current mode
+  C  crouch deeper (hold only)   V  rise      Z  back to nominal height
   Q  stop, release servo torque, and quit
 
 A/D/X are accepted only by a turning policy (5-D gait command).
@@ -39,12 +40,17 @@ ROOT = Path(__file__).resolve().parent
 
 
 class TerminalCommand:
-  def __init__(self, speed: float, yaw_rate: float, turning: bool):
+  def __init__(self, speed: float, yaw_rate: float, turning: bool,
+               crouching: bool = False):
     self.mode = "hold"
     self.speed = abs(speed)
     self.yaw_magnitude = abs(yaw_rate)
     self.turning = turning
+    self.crouching = crouching
     self.yaw = 0.0
+    self.height = 0.0
+    self.crouch_step = 0.015
+    self.crouch_min = -0.045
     self.stop_requested = False
     self._fd = sys.stdin.fileno()
     self._saved = None
@@ -99,13 +105,26 @@ class TerminalCommand:
       elif key == "x":
         self.yaw = 0.0
         print("\n[X] STRAIGHT")
+      elif key in ("c", "v", "z") and not self.crouching:
+        print("\n[!] this policy has no height channel; ignoring")
+      elif key == "c":
+        self.height = max(self.height - self.crouch_step, self.crouch_min)
+        note = "" if self.mode == "hold" else "  (applies in HOLD)"
+        print(f"\n[C] CROUCH {self.height*1000:+.0f} mm{note}")
+      elif key == "v":
+        self.height = min(self.height + self.crouch_step, 0.006)
+        note = "" if self.mode == "hold" else "  (applies in HOLD)"
+        print(f"\n[V] RISE {self.height*1000:+.0f} mm{note}")
+      elif key == "z":
+        self.height = 0.0
+        print("\n[Z] NOMINAL HEIGHT")
       elif key in ("q", "\x03"):
         self.stop_requested = True
         print("\n[Q] STOP")
 
-  def snapshot(self) -> tuple[str, float, float, bool]:
+  def snapshot(self) -> tuple[str, float, float, float, bool]:
     self._poll_key()
-    return self.mode, self.speed, self.yaw, self.stop_requested
+    return self.mode, self.speed, self.yaw, self.height, self.stop_requested
 
 
 def _default_policy() -> Path:
@@ -154,22 +173,26 @@ def main() -> int:
   session = ort.InferenceSession(str(policy), providers=["CPUExecutionProvider"])
   (default_pos, action_scale, gait_freq, checkpoint, _neutral_shift,
    gait_dim, heading_dim, transition_time, velocity_ramp,
-   yaw_ramp) = _read_metadata(session)
-  if gait_dim not in (4, 5):
+   yaw_ramp, height_ramp) = _read_metadata(session)
+  if gait_dim not in (4, 5, 6):
     raise SystemExit(f"policy is not signed-speed conditioned (gait dim {gait_dim})")
 
   print(f"Policy: {policy.name}; checkpoint: {checkpoint}")
   print(f"Gait: {gait_freq:g} Hz; transition: {transition_time:g} s; "
         f"velocity ramp: {velocity_ramp:g} m/s^2")
-  if gait_dim == 5:
+  if gait_dim in (5, 6):
     print(f"Turning enabled; yaw ramp: {yaw_ramp:g} rad/s^2, "
           f"A/D command {args.yaw_rate:g} rad/s")
+  if gait_dim == 6:
+    print(f"Crouch enabled; height ramp: {height_ramp:g} m/s "
+          f"(C deeper / V rise / Z nominal, HOLD only)")
   print("Robot will start in HOLD. Keep it supported with room to move.")
   if not args.yes and input("Type 'go' to enable servo torque: ").strip().lower() != "go":
     print("aborted")
     return 1
 
-  controller = TerminalCommand(args.speed, args.yaw_rate, gait_dim == 5)
+  controller = TerminalCommand(args.speed, args.yaw_rate,
+                                gait_dim in (5, 6), gait_dim == 6)
   bus = k2_bus.open_bus(args.bus)
 
   def request_stop(*_args) -> None:
@@ -180,8 +203,10 @@ def main() -> int:
     with controller:
       bus.torque(True)
       keys = "H=hold  M=march  W=forward  S=backward"
-      if gait_dim == 5:
+      if gait_dim in (5, 6):
         keys += "  A=left  D=right  X=straight"
+      if gait_dim == 6:
+        keys += "  C=crouch  V=rise  Z=nominal"
       print(f"Keys: {keys}  Q=quit")
       run(
         bus, session, default_pos, action_scale,

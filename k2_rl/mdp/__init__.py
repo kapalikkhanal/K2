@@ -21,6 +21,7 @@ from k2_rl.mdp.observations import (  # noqa: F401
 from k2_rl.mdp.rewards import (  # noqa: F401
   action_rate_soft_limit_l2,
   base_ang_vel_xy_l2,
+  base_height_command_l2,
   base_height_l2,
   base_heading_error,
   base_lateral_position_l2,
@@ -40,6 +41,7 @@ from k2_rl.mdp.rewards import (  # noqa: F401
   gait_swing,
   heading_reference_error,
   hold_joint_pair_symmetry_l2,
+  hold_joint_vel_l2,
   lateral_path_deviation_l2,
   swing_amplitude_symmetry_l2,
   swing_sole_height_spread_l2,

@@ -584,3 +584,41 @@ class swing_amplitude_symmetry_l2:
     self.peak_r = torch.where(at_r, u_r.detach(), self.peak_r)
     self.peak_l = torch.where(at_l, u_l.detach(), self.peak_l)
     return march * torch.sum(torch.square(self.peak_r - self.peak_l), dim=1)
+
+
+def base_height_command_l2(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  target_height: float,
+  height_index: int = 5,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Quadratic penalty on base height versus the COMMANDED height.
+
+  Drop-in replacement for :func:`base_height_l2`: the command channel is zero
+  while walking (it is gated by ``1 - march``), so walking is scored against
+  exactly the same fixed target as before and only the hold height moves.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  target = target_height + command[:, height_index]
+  return torch.square(asset.data.root_link_pos_w[:, 2] - target)
+
+
+def hold_joint_vel_l2(
+  env: "ManagerBasedRlEnv",
+  command_name: str,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+  """Penalize joint motion while holding -- damping for the standing loop.
+
+  NOTE the limitation, measured 2026-08-21: on hardware the hold loop buzzes at
+  ~2.9 Hz with action-rate RMS 1.58, nearly the 1.7 it uses while WALKING. In
+  the twin the same policy holds at action-rate 0.01, i.e. essentially still.
+  So this term has almost no gradient to work with in simulation and cannot be
+  tuned there. It is included as insurance, not as the fix; the fix that does
+  have gradient is lowering overall loop gain via the action-rate penalties.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  hold = 1.0 - env.command_manager.get_command(command_name)[:, 0]
+  return torch.sum(torch.square(asset.data.joint_vel), dim=1) * hold

@@ -52,6 +52,7 @@ from mjlab.utils.noise import UniformNoiseCfg as Unoise
 
 from k2_rl import mdp
 from k2_rl.bidir_env_cfg import make_k2_bidir_env_cfg
+from k2_rl.inplace_env_cfg import TARGET_BASE_HEIGHT
 from k2_rl.k2_constants import FOOT_SITES, JOINT_PATTERNS
 from k2_rl.mdp import GaitCommandCfg
 
@@ -73,6 +74,8 @@ YAW_RATE_RAMP_RPS2 = 0.30
 SYMMETRY_YAW_FADE_STD = 0.12
 # Index of the yaw channel in the 5-D gait command [march, sin, cos, vx, wz].
 YAW_COMMAND_INDEX = 4
+# Index of the height channel in [march, sin, cos, vx, wz, dh].
+HEIGHT_COMMAND_INDEX = 5
 
 
 def make_k2_turn_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
@@ -232,6 +235,67 @@ def make_k2_turn_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   #   friction 0.2-1.5 / inertia +/-20% / sole 6 mm / vx +/-0.07 (run v8) --
   #     scored well (14.58 vs 13.85) but the operator judged the resulting gait
   #     a limp on hardware. Reverted in favour of fixing the limp directly.
+
+  # HOLD STANCE SYMMETRY. Operator observation: the legs are not parallel when
+  # holding -- one is forward of the other. Measured on iter 3499 across 64
+  # robots after 10 s of hold: hip_pitch R +5.18 vs L -2.48 deg, a 7.66 deg
+  # split, with knee (+3.72) and ankle_pitch (+2.88) partly compensating. That
+  # is a staggered stance, and the twin shows it too, so it is the policy's
+  # choice rather than a hardware artifact.
+  #
+  # `hold_pair_symmetry` already targets exactly this, but at weight -3.0 the
+  # whole term is worth 0.078 per step, and a staggered stance is genuinely more
+  # stable in pitch -- so the policy pays the fine and keeps the stagger.
+  # Raising to -15 makes the current split cost ~0.39, comparable to the major
+  # shaping terms.
+  #
+  # RISK: this is a constraint on hold, and over-constraining hold has hurt
+  # before -- forcing the exact captured crouch defeated a previously stable
+  # stance (see inplace_env_cfg). This only forces LEFT/RIGHT symmetry, not a
+  # specific pose, which is what that term was designed for. Watch hold
+  # survival, tilt and both-feet-down in evaluation, not just the split.
+  # -15 fixed the stagger (7.9 -> 2.2 deg) but coupling the legs added a
+  # feedback path: hold action-rate went 1.07 -> 1.58 on hardware (+48%) and the
+  # oscillation moved from a 0.8 Hz sway into a 2.9 Hz buzz. -8 keeps most of
+  # the parallelism and gives back half the added gain.
+  cfg.rewards["hold_pair_symmetry"].weight = -8.0
+
+  # CROUCH ON COMMAND, while holding only. SquatIK puts the reachable range at
+  # 250-308 mm against a 300.6 mm nominal, so there is only ~7 mm of extension
+  # available and ~50 mm of crouch -- this is a crouch-depth command, not a G1
+  # style squat. Trained to -45 mm with a little margin on the joint limits.
+  cfg.commands["gait"].height_offset_range = (
+    (-0.030, -0.030) if play else (-0.045, 0.006)
+  )
+  cfg.commands["gait"].height_ramp_rate_mps = 0.03
+  # Weight -25 was inherited for holding a FIXED height, where the error is a
+  # millimetre or two. Against a 45 mm command it is worth only 25*0.045^2 =
+  # 0.05, i.e. roughly free to ignore next to gait_swing (~0.6) or velocity
+  # tracking (~0.8) -- and measured on iter 3400 the policy did exactly that:
+  # a 45 mm command moved the robot 0.8 mm. -150 puts a full-depth miss at 0.30,
+  # in the same league as the terms it competes with.
+  cfg.rewards["base_height"] = RewardTermCfg(
+    func=mdp.base_height_command_l2,
+    weight=-150.0,
+    params={
+      "command_name": "gait",
+      "target_height": TARGET_BASE_HEIGHT,
+      "height_index": HEIGHT_COMMAND_INDEX,
+    },
+  )
+
+  # Hold-loop damping. Included at the operator's request; see the docstring --
+  # sim hold is already still (action-rate 0.01 vs 1.58 on hardware), so this
+  # has little gradient and is insurance rather than the mechanism.
+  cfg.rewards["hold_joint_vel"] = RewardTermCfg(
+    func=mdp.hold_joint_vel_l2,
+    weight=-0.02,
+    params={"command_name": "gait"},
+  )
+  # These DO have gradient (the policy moves plenty while walking) and lower
+  # overall loop gain, which is what actually carries into the hold buzz.
+  cfg.rewards["action_rate_l2"].weight = -0.30
+  cfg.rewards["action_acc_l2"].weight = -0.02
 
   # LEG SYMMETRY. Operator observation on hardware: the robot limps -- and the
   # logs agree, hip-pitch swing measured 8.3 deg right against 9.7 left in

@@ -18,6 +18,13 @@ policy is worth putting on hardware:
   act rate/jerk   how hard the policy works the servos -- SEE THE WARNING BELOW
   yawsym          hip-yaw swing amplitude R:L, the gait asymmetry that ratchets
                   the real robot's heading around (1.00 = symmetric)
+  impact          PEAK contact force per leg, in units of body weight. Hardware
+                  showed the left foot slapping down and the right rolling on:
+                  1.22x the body disturbance and 1.15x the ankle-roll load on
+                  the left. Nothing in the reward set constrains arrival force.
+                  Measured as force, not touchdown velocity: physics runs at
+                  500 Hz and this samples at 50, so the velocity transient is
+                  already over by the time it could be read.
 
 WARNING on act_rate. A policy that distrusts its own state raises loop gain, and
 on hardware that excites K2's 2.5-8 Hz closed-loop resonance. The twin has no
@@ -118,6 +125,10 @@ class Evaluator:
     ]
     self.inner = _sites(robot, FOOT_INNER_SITES)
     self.left, self.right = 0, 1  # index into the resolved (left, right) lists
+    self.foot_sites = self.center  # [left, right] site ids, resolved by name
+    mass = float(robot.data.default_mass.sum()) if hasattr(
+      robot.data, "default_mass") else 1.28
+    self.body_weight = max(mass * 9.81, 1e-6)
     # Hip-yaw swing symmetry: unequal leg twist is what yaws the real robot when
     # no turn is commanded (+0.61 deg/s measured, vs +0.06 in the twin). Sim
     # cannot show the drift itself, but it CAN show the asymmetry that causes it.
@@ -148,7 +159,17 @@ class Evaluator:
     acc["roll_min"] = torch.minimum(
       acc["roll_min"], torch.where(alive, roll, torch.full_like(roll, 9.9)))
 
-    contact = (self.env.scene["feet_ground_contact"].data.found > 0).float()
+    sensor = self.env.scene["feet_ground_contact"]
+    contact = (sensor.data.found > 0).float()
+    # Peak normal contact force per foot, in body weights.
+    fz = sensor.data.force[..., 2].abs() / self.body_weight
+    acc["fmax"] = torch.maximum(acc["fmax"], fz * alive.unsqueeze(1))
+    # Resolve which SENSOR index is which FOOT, rather than assuming: the foot
+    # with no contact is the raised one, so pair each sensor slot with whichever
+    # named site is higher at that moment and let the evidence accumulate.
+    z = torch.stack([d.site_pos_w[:, sid, 2] for sid in self.foot_sites], 1)
+    for j in range(2):
+      acc["pair"][j] += ((1.0 - contact[:, j]).unsqueeze(1) * z).sum(dim=0)
     both_down = (contact.sum(dim=1) >= 2).float()
     any_down = (contact.sum(dim=1) >= 1).float()
 
@@ -166,6 +187,11 @@ class Evaluator:
     n = m.sum().clamp(min=1.0)
     acc["n"] += n
     q = d.joint_pos
+    d_ = d.default_joint_pos
+    # Mean sagittal pose split: what "the legs are not parallel" measures.
+    acc["hp_split"] += ((q[:, self.hip_pitch_r] - d_[:, self.hip_pitch_r])
+                        - (q[:, self.hip_pitch_l] - d_[:, self.hip_pitch_l])
+                        ).mul(alive.float()).sum()
     for key, jid in (("yr", self.hip_yaw_r), ("yl", self.hip_yaw_l),
                      ("pr", self.hip_pitch_r), ("pl", self.hip_pitch_l)):
       v = q[:, jid]
@@ -232,6 +258,9 @@ class Evaluator:
       acc[key] = big(9.9)
     acc["roll_max"] = big(-9.9)
     acc["roll_min"] = big(9.9)
+    acc["fmax"] = torch.zeros(self.num_envs, 2, device=self.device)
+    acc["hp_split"] = z()
+    acc["pair"] = torch.zeros(2, 2, device=self.device)
     lat0 = torch.zeros(self.num_envs, device=self.device)
     acc["gap_min"] = torch.full((), 9.9, device=self.device)
     acc["inner_min"] = torch.full((), 9.9, device=self.device)
@@ -275,6 +304,14 @@ class Evaluator:
           torch.where(alive, (lat_now - lat0).abs(),
                       torch.zeros_like(lat_now)).max())
 
+    # sensor slot -> named foot: the slot that is OFF contact pairs with the
+    # site that is high at that time, so the larger accumulator wins.
+    pair = acc["pair"]
+    slot_to_foot = (0, 1) if float(pair[0, 0] + pair[1, 1]) >= float(
+      pair[0, 1] + pair[1, 0]) else (1, 0)
+    fpk = acc["fmax"].amax(dim=0)
+    peak_force = [float(fpk[slot_to_foot.index(0)]),
+                  float(fpk[slot_to_foot.index(1)])]
     n = float(acc["n"].clamp(min=1.0))
     window = measure * self.dt
     alive_f = float(alive.float().mean())
@@ -311,10 +348,16 @@ class Evaluator:
         (acc["yrmax"] - acc["yrmin"])[alive].mean()) if bool(alive.any()) else 0.0),
       "hip_yaw_swing_l_deg": deg(float(
         (acc["ylmax"] - acc["ylmin"])[alive].mean()) if bool(alive.any()) else 0.0),
+      "hip_pitch_split_deg": deg(float(acc["hp_split"]) / n),
+      "impact_l_bw": peak_force[0],
+      "impact_r_bw": peak_force[1],
       "act_rate_rms": math.sqrt(max(float(acc["arate_sq"]) / n, 0.0)),
       "act_jerk_rms": math.sqrt(max(float(acc["ajerk_sq"]) / n, 0.0)),
       "cmd_vx": vx, "cmd_wz": wz, "cmd_march": march, "window_s": window,
     }
+    out["impact_ratio"] = (
+      out["impact_l_bw"] / out["impact_r_bw"]
+      if out["impact_r_bw"] > 1e-6 else float("nan"))
     out["hip_yaw_swing_ratio"] = (
       out["hip_yaw_swing_r_deg"] / out["hip_yaw_swing_l_deg"]
       if out["hip_yaw_swing_l_deg"] > 1e-6 else float("nan"))
@@ -364,9 +407,15 @@ def score(res: dict) -> tuple[float, list[str]]:
              if not math.isnan(p["apex_mean_mm"]))
   drift = abs(res["fwd"]["heading_rate_dps"])
   hold_planted = res["hold"]["both_feet_down"]
+  hold_split = abs(res["hold"]["hip_pitch_split_deg"])
   ratios = [p["hip_yaw_swing_ratio"] for p in step_phases
             if not math.isnan(p["hip_yaw_swing_ratio"])]
   yawsym = sum(min(r, 1.0 / r) for r in ratios) / max(len(ratios), 1) if ratios else 0.0
+  imp = [max(p["impact_l_bw"], p["impact_r_bw"]) for p in step_phases]
+  impact = sum(imp) / max(len(imp), 1)
+  iratios = [p["impact_ratio"] for p in step_phases
+             if not math.isnan(p["impact_ratio"]) and p["impact_ratio"] > 0]
+  impsym = (sum(min(x, 1.0 / x) for x in iratios) / len(iratios)) if iratios else 0.0
   arate = max(p["act_rate_rms"] for p in step_phases)
   if arate > 1.15 * REFERENCE_ACT_RATE:
     notes.append(f"JITTER act_rate {arate:.2f} vs ref {REFERENCE_ACT_RATE:.2f}")
@@ -384,6 +433,9 @@ def score(res: dict) -> tuple[float, list[str]]:
     + 0.6 * clip01(1.0 - drift / 3.0)         # 3 deg/s straight-line drift
     + 1.0 * clip01(1.0 - max(0.0, arate - REFERENCE_ACT_RATE) / 0.5)
     + 1.5 * yawsym                            # hip-yaw swing symmetry, 1 = equal
+    + 1.0 * clip01((6.0 - impact) / 4.0)      # 6 body weights peak -> zero credit
+    + 1.0 * impsym                            # equal landing between the legs
+    + 1.0 * clip01(1.0 - hold_split / 6.0)    # 6 deg hold stagger -> zero credit
   )
   if worst_survival < 0.90:
     s -= 5.0
@@ -402,7 +454,10 @@ def _fmt(name: str, p: dict) -> str:
           f"  arate {p['act_rate_rms']:5.2f}"
           f"  yawsym {p['hip_yaw_swing_ratio']:4.2f}"
           f"  stride {p['hip_pitch_swing_r_deg']:4.1f}/{p['hip_pitch_swing_l_deg']:4.1f}"
-          f"  rollp2p {p['roll_p2p_deg']:5.2f}")
+          f"  rollp2p {p['roll_p2p_deg']:5.2f}"
+          f"  hpsplit {p['hip_pitch_split_deg']:+5.2f}"
+          f"  force {p['impact_l_bw']:4.1f}/{p['impact_r_bw']:4.1f}"
+          f"({p['impact_ratio']:4.2f})")
 
 
 def main() -> None:
