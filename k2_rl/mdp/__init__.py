@@ -41,6 +41,7 @@ from k2_rl.mdp.rewards import (  # noqa: F401
   heading_reference_error,
   hold_joint_pair_symmetry_l2,
   lateral_path_deviation_l2,
+  swing_amplitude_symmetry_l2,
   swing_sole_height_spread_l2,
   track_forward_velocity_exp,
   track_yaw_rate_exp,

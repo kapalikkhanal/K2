@@ -33,7 +33,7 @@ PLAY_FORWARD_SPEED = 0.03
 # side and provoke large ankle-roll corrections. Twelve millimetres retains
 # useful clearance over the 5 mm support-height DR while reducing single-leg
 # leverage. Validate the realized full-sole clearance before hardware export.
-FORWARD_SWING_HEIGHT = 0.012
+FORWARD_SWING_HEIGHT = 0.012  # base tasks keep 12 mm
 
 
 def make_k2_forward_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:

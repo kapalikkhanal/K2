@@ -31,7 +31,7 @@ from pathlib import Path
 import onnxruntime as ort
 
 from hardware import k2_bus
-from hardware.k2_policy_run import _read_metadata, run
+from hardware.k2_policy_run import _read_metadata, parse_joint_trim, run
 from hardware.k2_stabilizer import UnsafeTiltError
 
 
@@ -133,6 +133,9 @@ def main() -> int:
   parser.add_argument("--fall-angle", type=float, default=14.0)
   parser.add_argument("--slew", type=float, default=1.0)
   parser.add_argument("--balance-trim-right", type=float, default=0.0)
+  parser.add_argument("--joint-trim", default=None,
+                      help="per-joint mechanical trim in degrees, e.g. "
+                           "'hip_yaw_R=+2.5,hip_yaw_L=-2.5'")
   parser.add_argument("--log", type=Path, default=None)
   parser.add_argument("--yes", action="store_true")
   args = parser.parse_args()
@@ -143,6 +146,7 @@ def main() -> int:
     raise SystemExit("--yaw-rate must be in [0, 0.25] rad/s")
   if not -5.0 <= args.balance_trim_right <= 5.0:
     raise SystemExit("--balance-trim-right must be between -5 and +5 degrees")
+  joint_trim = parse_joint_trim(args.joint_trim)   # validates before torque on
   policy = (args.policy or _default_policy()).resolve()
   if not policy.exists():
     raise SystemExit(f"missing policy: {policy}")
@@ -190,6 +194,7 @@ def main() -> int:
         command_source=controller.snapshot,
         gait_velocity_ramp_rate_mps2=velocity_ramp,
         gait_yaw_rate_ramp_rate_rps2=yaw_ramp,
+        joint_trim=joint_trim,
       )
   except UnsafeTiltError as exc:
     print(f"\nSAFETY STOP: {exc}")

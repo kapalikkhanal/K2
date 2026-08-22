@@ -139,6 +139,137 @@ def make_k2_turn_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["gait_symmetry"].params["yaw_command_index"] = YAW_COMMAND_INDEX
   cfg.rewards["gait_symmetry"].params["yaw_fade_std"] = SYMMETRY_YAW_FADE_STD
 
+  # NOTE (2026-08-21): a +/-0.06 rad encoder_bias widening was tried here and
+  # REVERTED. It rested on the belief that the robot stood ~5 deg more
+  # asymmetric than the twin -- but comparing the SAME policy's hold pose in sim
+  # vs hardware showed the twin's own hip-yaw split is +6.15 deg against the
+  # robot's +4.99, i.e. the real robot is slightly MORE symmetric, and every
+  # joint agrees within 1.5 deg. There was no asymmetry to be robust to.
+  # Worse, telling the policy to distrust its encoders raised loop gain: on
+  # hardware, action-rate RMS +51%, jerk +53..87%, and gyro energy in the known
+  # 2.5-8 Hz closed-loop resonance band went from 54% to 72%. The twin cannot
+  # see that failure -- it has no resonance -- so the 128-robot score IMPROVED
+  # (5.9 -> 11.8) while the real robot got visibly worse. Do not widen this
+  # without a hardware jitter metric in the loop.
+
+  # Hardware root cause (2026-08-21): marching in place with ZERO yaw
+  # commanded, the real robot yaws left at +0.61 deg/s while the twin yaws
+  # +0.06 deg/s -- a 10x gap that matches the +0.54 deg/s additive offset
+  # measured during commanded turns, and fully explains "left turns fast, right
+  # turns slow" (it adds to +wz and subtracts from -wz). It is NOT sensor bias:
+  # the static residual after ImuAttitude debiasing is +0.024 deg/s, 5% of it
+  # (`hardware/test_imu_yaw_bias.py`).
+  #
+  # The cause is the gait's own left/right asymmetry. Hip yaw is by far the
+  # worst joint -- swing amplitude R:L is 0.41 in sim and 0.58 on hardware, so
+  # the left leg twists roughly twice as far as the right. Equal and opposite
+  # leg twists cancel their reaction torque on the body; unequal ones ratchet it
+  # around. The twin hides this because its feet do not slip or comply.
+  #
+  # `gait_antisymmetry_l2` already penalizes exactly this (u_R + u_L)^2 form and
+  # is only applied to hip pitch today. Hip yaw wants the same treatment, faded
+  # with commanded yaw so a real turn -- which is asymmetric on purpose -- is
+  # not charged for it.
+  cfg.rewards["gait_symmetry_yaw"] = RewardTermCfg(
+    func=mdp.gait_antisymmetry_l2,
+    weight=-4.0,
+    params={
+      "command_name": "gait",
+      "right_cfg": SceneEntityCfg(
+        "robot", joint_names=[r"hip_roll_hip_yaw_right_joint"]
+      ),
+      "left_cfg": SceneEntityCfg(
+        "robot", joint_names=[r"hip_roll_hip_yaw_left_joint"]
+      ),
+      "yaw_command_index": YAW_COMMAND_INDEX,
+      "yaw_fade_std": SYMMETRY_YAW_FADE_STD,
+    },
+  )
+
+  # STRIDE LENGTH. At a fixed cadence, stride is not a free parameter:
+  #   stride = commanded_speed / (2 * gait_freq)
+  # so `feet_under_base` (below) only PERMITS a longer step, it cannot demand
+  # one -- easing it from -0.25 to -0.15 measurably changed nothing. Raising the
+  # commanded speed is the other arithmetic option and is the wrong lever (it
+  # was walked back once already). That leaves cadence.
+  #
+  # 0.75 -> 0.58 Hz is a 30% longer step at the same speed, which takes the
+  # measured forward hip-pitch swing from ~6.7 deg toward ~8.7 deg (+2 deg).
+  # TRADE-OFF: a slower cycle means longer single support, and lateral rocking
+  # at gait frequency is already what caps this robot's speed (it fell at
+  # 0.025 m/s, and touched 13.8 of 14 deg at 0.018). Slower may give the policy
+  # more time to correct, or may give the rocking more time to build. Watch
+  # rollp2p and tilt in evaluation, not just the stride number.
+  # 0.75 -> 0.58 was validated on hardware (backward roll p2p 19.8 -> 14.3 deg,
+  # tilt max 13.4 -> 8.0, airborne-leg velocity RMS down 20-40%), so the worry
+  # that longer single support would worsen the lateral rocking was wrong -- it
+  # damped it. Operator asked for a further 25% step: 0.58 / 1.25 = 0.46 Hz.
+  # That is a 1.09 s swing per step, 63% longer than the original 0.67 s.
+  # 0.75 -> 0.58 Hz, validated on hardware: backward roll p2p 19.8 -> 14.3 deg,
+  # tilt max 13.4 -> 8.0, airborne-leg velocity RMS down 20-40%, and it survived
+  # 0.025 m/s -- the speed at which the 0.75 Hz gait fell. Longer single support
+  # DAMPED the lateral rocking rather than feeding it.
+  #
+  # This is the exact cadence that produced turn_v5_iter2900. Two later
+  # experiments were tried and REVERTED at the operator's request:
+  #   0.46 Hz (+25% stride) -- worked, but visibly too slow.
+  #   0.70 Hz with vx +/-0.07 -- faster legs, untested on hardware.
+  cfg.commands["gait"].gait_freq = 0.58
+
+  # `feet_under_base` is the one term whose PURPOSE is to keep
+  # the feet under the body, so it is what caps step length -- the forward task
+  # already halved it from -0.5 to -0.25 when the speed range was raised. Ease
+  # it a little further for a slightly longer step. Deliberately a small move:
+  # this term is also what stops the swing foot landing far ahead of the body,
+  # and the robot is already close to a lateral-rocking limit at 0.018 m/s.
+  cfg.rewards["feet_under_base"].weight = -0.15
+
+  # DOMAIN RANDOMIZATION -- inherited from the bidirectional task, unchanged.
+  # This is the turn_v5_iter2900 recipe. Widenings tried and reverted:
+  #   encoder_bias +/-0.06 BACKFIRED on hardware (action rate +51%, jerk +87%,
+  #     gyro energy in the 2.5-8 Hz resonance band 54% -> 72%) while the twin
+  #     scored it two points HIGHER, because the twin has no resonance.
+  #   friction 0.2-1.5 / inertia +/-20% / sole 6 mm / vx +/-0.07 (run v8) --
+  #     scored well (14.58 vs 13.85) but the operator judged the resulting gait
+  #     a limp on hardware. Reverted in favour of fixing the limp directly.
+
+  # LEG SYMMETRY. Operator observation on hardware: the robot limps -- and the
+  # logs agree, hip-pitch swing measured 8.3 deg right against 9.7 left in
+  # forward walking (~15% mismatch), with the same split backward.
+  #
+  # `gait_symmetry` above already penalizes (u_R + u_L)^2 on hip pitch, which
+  # does see amplitude mismatch, but weakly: a 1.4 deg mismatch is 0.024 rad, so
+  # the whole term is worth 6e-4 before weighting and the policy can afford to
+  # ignore it. And that form is simply WRONG for knee and ankle pitch, whose
+  # antiphase sum is a nonzero constant (see the gait_antisymmetry_l2 docstring)
+  # -- penalizing it there fights their normal shape.
+  #
+  # This instead samples each leg at ITS OWN swing apex and compares like with
+  # like, so it reads amplitude mismatch directly on every sagittal joint.
+  cfg.rewards["leg_symmetry"] = RewardTermCfg(
+    func=mdp.swing_amplitude_symmetry_l2,
+    weight=-25.0,
+    params={
+      "command_name": "gait",
+      "right_cfg": SceneEntityCfg(
+        "robot",
+        joint_names=[
+          "base_link_hip_pitch_right_joint",
+          "hip_yaw_knee_right_joint",
+          "knee_ankle_pitch_right_joint",
+        ],
+      ),
+      "left_cfg": SceneEntityCfg(
+        "robot",
+        joint_names=[
+          "base_link_hip_pitch_left_joint",
+          "hip_yaw_knee_left_joint",
+          "knee_ankle_pitch_left_joint",
+        ],
+      ),
+    },
+  )
+
   # Hip yaw is the steering joint. The bidirectional 0.12 rad tolerance charges
   # nearly the whole per-joint pose reward for the ~0.17 rad excursion a step of
   # the commanded turn needs. Widen it to the value the omnidirectional task

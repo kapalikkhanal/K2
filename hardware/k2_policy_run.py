@@ -125,6 +125,50 @@ def _read_metadata(sess: ort.InferenceSession):
 
 
 SWAP_LEGS = np.array([6, 7, 8, 9, 10, 11, 0, 1, 2, 3, 4, 5])
+MAX_JOINT_TRIM_DEG = 10.0
+
+
+def parse_joint_trim(spec: str | None) -> np.ndarray:
+  """Parse "hip_yaw_R=+2.5,hip_yaw_L=-2.5" into a SIM_ORDER vector in radians.
+
+  A mechanical asymmetry -- a foot mounted at a slight yaw, one leg built a
+  fraction long -- forces the policy to hold a permanent differential just to
+  stand square, and it has to spend control authority doing so every tick. The
+  trim moves that differential into the wiring: the policy is shown a SYMMETRIC
+  robot, and the offset is added back on the way out to the servos.
+
+      observation : joint_pos_rel = (q - trim) - default_pose
+      command     : q_target      = default_pose + scale * action + trim
+
+  which is the same shape as the `encoder_bias` randomization the policy trained
+  against, so it is in-distribution by construction. Reverts by omission.
+  """
+  trim = np.zeros(len(C.SIM_ORDER), dtype=np.float32)
+  if not spec:
+    return trim
+  index = {name: i for i, name in enumerate(C.SIM_ORDER)}
+  for item in spec.split(","):
+    item = item.strip()
+    if not item:
+      continue
+    if "=" not in item:
+      raise SystemExit(f"--joint-trim needs NAME=DEGREES, got '{item}'")
+    name, _, value = item.partition("=")
+    name = name.strip()
+    if name not in index:
+      raise SystemExit(
+        f"unknown joint '{name}' in --joint-trim; expected one of "
+        f"{', '.join(C.SIM_ORDER)}")
+    try:
+      degrees = float(value)
+    except ValueError:
+      raise SystemExit(f"--joint-trim value for {name} is not a number: {value}")
+    if abs(degrees) > MAX_JOINT_TRIM_DEG:
+      raise SystemExit(
+        f"--joint-trim {name}={degrees:g} exceeds the +/-{MAX_JOINT_TRIM_DEG:g} "
+        "degree guard; a trim that large is a calibration problem, not a trim")
+    trim[index[name]] = math.radians(degrees)
+  return trim
 
 
 def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
@@ -133,7 +177,7 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
         heading_observation_dim=0, balance_trim_right_deg=0.0,
         gait_transition_time_s=0.0, command_source=None,
         gait_velocity_ramp_rate_mps2=0.08, yaw_rate=0.0,
-        gait_yaw_rate_ramp_rate_rps2=0.30):
+        gait_yaw_rate_ramp_rate_rps2=0.30, joint_trim=None):
   dt = 1.0 / RATE_HZ
   iname = sess.get_inputs()[0].name
   # Route the policy's right-leg block to the other physical leg. Equivalent to
@@ -141,6 +185,14 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
   # own home_raw/sign, and every POS_DESC is mirror-symmetric so the signs stay
   # valid) -- but as a flag, so it reverts by omission. Diagnostic only.
   perm = SWAP_LEGS if swap_legs else np.arange(len(C.SIM_ORDER))
+  # Physical, per-servo quantity: applied in SIM_ORDER, never permuted. NOTE the
+  # name: `trim` below is the scalar balance-trim ANGLE, a different thing.
+  joint_trim_rad = (np.zeros(len(C.SIM_ORDER), np.float32) if joint_trim is None
+                    else np.asarray(joint_trim, np.float32))
+  if np.any(joint_trim_rad):
+    shown = ", ".join(f"{C.SIM_ORDER[i]}={math.degrees(v):+.2f}"
+                      for i, v in enumerate(joint_trim_rad) if v)
+    print(f"  joint trim (deg): {shown}")
 
   calib = (C.default_calibration() if isinstance(bus, k2_bus.SimBus)
            else _hw_calibration())
@@ -369,7 +421,7 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
       obs_parts = [
         gyro.astype(np.float32),          # base_ang_vel
         policy_grav.astype(np.float32),   # projected_gravity with balance trim
-        (q - default_pos)[perm],          # joint_pos_rel
+        (q - joint_trim_rad - default_pos)[perm],  # joint_pos_rel, trimmed
         qd[perm],                         # joint_vel_rel
         last_action,                      # actions
         heading_obs,                      # optional [sin(yaw), cos(yaw)]
@@ -387,6 +439,7 @@ def run(bus, sess, default_pos, action_scale, mode, duration, slew_rad_s,
 
       target = default_pos.copy()
       target[perm] = default_pos[perm] + action_scale * action
+      target = target + joint_trim_rad
       target = np.array([C.clamp_q(j, float(target[i]))
                          for i, j in enumerate(C.SIM_ORDER)], np.float32)
       if slew_rad_s > 0:
@@ -502,6 +555,11 @@ def main(argv=None):
   ap.add_argument("--balance-trim-right", type=float, default=0.0,
                   help="degrees of rightward balance trim; positive counters "
                        "a repeatable robot-left lean (safe range +/-5)")
+  ap.add_argument("--joint-trim", default=None,
+                  help="per-joint mechanical trim, e.g. "
+                       "'hip_yaw_R=+2.5,hip_yaw_L=-2.5' (degrees). Shows the "
+                       "policy a symmetric robot and adds the offset back at "
+                       "the servos; omit for no trim.")
   ap.add_argument("--log", help="write policy, IMU, command and encoder CSV")
   ap.add_argument("--viewer", action="store_true", help="sim only")
   ap.add_argument("--fast", action="store_true", help="sim only: no wall-clock")
@@ -582,7 +640,7 @@ def main(argv=None):
           args.forward_speed, heading_observation_dim,
           args.balance_trim_right, gait_transition_time_s, None,
           gait_velocity_ramp_rate_mps2, args.yaw_rate,
-          gait_yaw_rate_ramp_rate_rps2)
+          gait_yaw_rate_ramp_rate_rps2, parse_joint_trim(args.joint_trim))
     except UnsafeTiltError as exc:
       print(f"SAFETY STOP: {exc}")
       return 2

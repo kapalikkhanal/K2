@@ -39,6 +39,21 @@ BASE_QUAT = "0.5 0.5 0.5 0.5"
 
 # Robot_v4: the sole/collision moved off the old single "Ankle" onto the new
 # ankle-roll "Feet" link (the Ankle link is now just the pitch bracket).
+# Link livery, applied to visual and collision-visual geoms alike. Longest
+# prefixes must come first: "Hip_pitch" would otherwise be shadowed by "Hip_".
+GRAY = "0.55 0.55 0.58 1"
+BLACK = "0.13 0.13 0.14 1"
+RED = "0.78 0.11 0.13 1"
+PART_COLORS = {
+    "base_link": GRAY,
+    "Hip_roll": BLACK,
+    "Knee": BLACK,
+    "Feet": BLACK,
+    "Hip_pitch": RED,
+    "Hip_yaw": RED,
+    "Ankle": RED,
+}
+
 FOOT_LINKS = {"Feet_right": "right_foot", "Feet_left": "left_foot"}
 
 # Ground clearance of the soles at the spawn pose, metres.
@@ -255,6 +270,13 @@ def main():
     for name, body in bodies.items():
         for geom in body.findall("geom"):
             is_visual = geom.get("mesh", "").endswith("_collision") is False
+            # Livery. The CAD carries no colour, so paint by link here rather
+            # than editing the generated XML, which regeneration would discard.
+            mesh = geom.get("mesh", "")
+            for prefix, rgba in PART_COLORS.items():
+                if mesh.startswith(prefix):
+                    geom.set("rgba", rgba)
+                    break
             if name in FOOT_LINKS and not is_visual:
                 geom.set("contype", "1")
                 geom.set("conaffinity", "1")

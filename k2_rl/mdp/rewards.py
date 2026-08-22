@@ -520,3 +520,67 @@ def feet_lateral_vel_body_l2(
   )
   v_b = quat_apply_inverse(quat, v_w.reshape(-1, 3)).view(-1, num_sites, 3)
   return torch.sum(torch.square(v_b[..., 1]), dim=1)
+
+
+class swing_amplitude_symmetry_l2:
+  """Penalize a LIMP: unequal swing amplitude between the two legs.
+
+  :func:`gait_antisymmetry_l2` penalizes ``(u_R + u_L)**2``, which does register
+  hip-pitch amplitude mismatch, but only faintly -- the measured hardware limp
+  was 1.4 deg, i.e. 0.024 rad, worth 6e-4 before weighting. And that form is
+  wrong for knee and ankle pitch, whose antiphase sum is a nonzero constant, so
+  driving it to zero fights the shape those joints are supposed to have.
+
+  This samples each leg's joint deviation AT ITS OWN SWING APEX and penalizes
+  the difference, comparing like with like. It needs one buffer per leg, which
+  is why this is a class: mjlab instantiates class terms with ``(cfg, env)`` and
+  keeps them alive across steps.
+
+  Sagittal joints only (hip pitch, knee, ankle pitch). Both legs move the same
+  way in the sagittal plane, so the deviations compare directly with no sign
+  flip -- unlike roll/yaw, which are mirrored.
+  """
+
+  def __init__(self, cfg, env: "ManagerBasedRlEnv"):
+    right_cfg: SceneEntityCfg = cfg.params["right_cfg"]
+    left_cfg: SceneEntityCfg = cfg.params["left_cfg"]
+    right_cfg.resolve(env.scene)
+    left_cfg.resolve(env.scene)
+    if len(right_cfg.joint_ids) != len(left_cfg.joint_ids):
+      raise RuntimeError("leg symmetry requires paired right/left joint lists")
+    n = len(right_cfg.joint_ids)
+    self.peak_r = torch.zeros(env.num_envs, n, device=env.device)
+    self.peak_l = torch.zeros(env.num_envs, n, device=env.device)
+
+  def reset(self, env_ids=None):
+    if env_ids is None:
+      self.peak_r.zero_()
+      self.peak_l.zero_()
+    else:
+      self.peak_r[env_ids] = 0.0
+      self.peak_l[env_ids] = 0.0
+    return {}
+
+  def __call__(
+    self,
+    env: "ManagerBasedRlEnv",
+    command_name: str,
+    right_cfg: SceneEntityCfg,
+    left_cfg: SceneEntityCfg,
+    apex: float = 0.9,
+  ) -> torch.Tensor:
+    asset: Entity = env.scene[right_cfg.name]
+    q = asset.data.joint_pos
+    d = asset.data.default_joint_pos
+    u_r = q[:, right_cfg.joint_ids] - d[:, right_cfg.joint_ids]
+    u_l = q[:, left_cfg.joint_ids] - d[:, left_cfg.joint_ids]
+    command = env.command_manager.get_command(command_name)
+    march, sinp = command[:, 0], command[:, 1]
+    # One leg is at its swing extreme near sin = +1, the other near sin = -1.
+    # Which is which does not matter: either way each leg is sampled at the same
+    # point of its own half-cycle, so the comparison stays like-for-like.
+    at_r = (sinp > apex).unsqueeze(1)
+    at_l = (sinp < -apex).unsqueeze(1)
+    self.peak_r = torch.where(at_r, u_r.detach(), self.peak_r)
+    self.peak_l = torch.where(at_l, u_l.detach(), self.peak_l)
+    return march * torch.sum(torch.square(self.peak_r - self.peak_l), dim=1)

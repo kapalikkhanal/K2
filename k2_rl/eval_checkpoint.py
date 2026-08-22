@@ -15,6 +15,17 @@ policy is worth putting on hardware:
   vx tracking     realized / commanded forward speed, both signs
   wz tracking     realized / commanded yaw rate, both signs
   heading drift   yaw wander per 10 s when NO turn is commanded
+  act rate/jerk   how hard the policy works the servos -- SEE THE WARNING BELOW
+  yawsym          hip-yaw swing amplitude R:L, the gait asymmetry that ratchets
+                  the real robot's heading around (1.00 = symmetric)
+
+WARNING on act_rate. A policy that distrusts its own state raises loop gain, and
+on hardware that excites K2's 2.5-8 Hz closed-loop resonance. The twin has no
+such resonance, so it CANNOT score that failure: the turn_v2b policies measured
++17% action-rate here and +51% on the real robot, and scored two points HIGHER
+than the policy they were worse than. Treat act_rate as a relative yellow flag
+against a known-good reference (turn_v1_iter2900 = 1.86 in sim, 2.16 on
+hardware), never as proof that a policy is smooth enough to deploy.
 
 Startup domain randomization (mass, PD gains, friction, encoder bias, base CoM)
 is active in the play config, so the N robots are N different machines. Pushes,
@@ -52,17 +63,26 @@ from k2_rl.k2_constants import (
   FOOT_TOE_SITES,
 )
 
-# (name, march, vx, wz)
-PHASES = (
-  ("hold",    0.0,  0.00,  0.00),
-  ("march",   1.0,  0.00,  0.00),
-  ("fwd",     1.0,  0.03,  0.00),
-  ("back",    1.0, -0.03,  0.00),
-  ("turn_L",  1.0,  0.00,  0.20),
-  ("turn_R",  1.0,  0.00, -0.20),
-  ("arc_L",   1.0,  0.03,  0.15),
-  ("arc_R",   1.0, -0.03, -0.15),
-)
+# Action-rate RMS of turn_v1_iter2900 in this harness: the smoothest policy that
+# has actually been driven on hardware. Used as a RELATIVE baseline only.
+REFERENCE_ACT_RATE = 1.86
+
+def make_phases(vx: float, wz: float):
+  """(name, march, vx, wz). Test where the policy is meant to RUN: the design
+  point moves with cadence, since stride = vx / (2 * gait_freq)."""
+  return (
+    ("hold",    0.0,  0.00,  0.00),
+    ("march",   1.0,  0.00,  0.00),
+    ("fwd",     1.0,   vx,   0.00),
+    ("back",    1.0,  -vx,   0.00),
+    ("turn_L",  1.0,  0.00,   wz),
+    ("turn_R",  1.0,  0.00,  -wz),
+    ("arc_L",   1.0,   vx,  wz * 0.75),
+    ("arc_R",   1.0,  -vx, -wz * 0.75),
+  )
+
+
+PHASES = make_phases(0.03, 0.20)
 
 
 def _sites(entity, names):
@@ -98,6 +118,16 @@ class Evaluator:
     ]
     self.inner = _sites(robot, FOOT_INNER_SITES)
     self.left, self.right = 0, 1  # index into the resolved (left, right) lists
+    # Hip-yaw swing symmetry: unequal leg twist is what yaws the real robot when
+    # no turn is commanded (+0.61 deg/s measured, vs +0.06 in the twin). Sim
+    # cannot show the drift itself, but it CAN show the asymmetry that causes it.
+    self.hip_yaw_r = robot.find_joints("hip_roll_hip_yaw_right_joint")[0][0]
+    self.hip_yaw_l = robot.find_joints("hip_roll_hip_yaw_left_joint")[0][0]
+    # Hip-pitch swing is the stride proxy: the fore/aft foot travel is roughly
+    # leg length times this angle, and it is what "the stride is too short"
+    # actually refers to on hardware.
+    self.hip_pitch_r = robot.find_joints("base_link_hip_pitch_right_joint")[0][0]
+    self.hip_pitch_l = robot.find_joints("base_link_hip_pitch_left_joint")[0][0]
 
   def load(self, checkpoint: Path):
     runner = self.runner_cls(
@@ -106,13 +136,17 @@ class Evaluator:
     runner.load(str(checkpoint), map_location=self.device)
     return runner.get_inference_policy(self.device)
 
-  def _measure(self, acc, alive, sinp):
+  def _measure(self, acc, alive, sinp, action=None, prev=None, prev2=None):
     """Accumulate one step of physical measurements over the alive envs."""
     d = self.robot.data
     grav = d.projected_gravity_b
     tilt = torch.acos(torch.clamp(-grav[:, 2], -1.0, 1.0))
     # Signed roll: +y is the robot's left, so a persistent sign is a real lean.
     roll = torch.atan2(grav[:, 1], -grav[:, 2])
+    acc["roll_max"] = torch.maximum(
+      acc["roll_max"], torch.where(alive, roll, torch.full_like(roll, -9.9)))
+    acc["roll_min"] = torch.minimum(
+      acc["roll_min"], torch.where(alive, roll, torch.full_like(roll, 9.9)))
 
     contact = (self.env.scene["feet_ground_contact"].data.found > 0).float()
     both_down = (contact.sum(dim=1) >= 2).float()
@@ -131,6 +165,20 @@ class Evaluator:
     m = alive.float()
     n = m.sum().clamp(min=1.0)
     acc["n"] += n
+    q = d.joint_pos
+    for key, jid in (("yr", self.hip_yaw_r), ("yl", self.hip_yaw_l),
+                     ("pr", self.hip_pitch_r), ("pl", self.hip_pitch_l)):
+      v = q[:, jid]
+      big = torch.where(alive, v, torch.full_like(v, -9.9))
+      small = torch.where(alive, v, torch.full_like(v, 9.9))
+      acc[key + "max"] = torch.maximum(acc[key + "max"], big)
+      acc[key + "min"] = torch.minimum(acc[key + "min"], small)
+    if action is not None and prev is not None:
+      rate = (action - prev) / self.dt
+      acc["arate_sq"] += (torch.square(rate).mean(dim=1) * m).sum()
+      if prev2 is not None:
+        jerk = (action - 2.0 * prev + prev2) / (self.dt * self.dt)
+        acc["ajerk_sq"] += (torch.square(jerk).mean(dim=1) * m).sum()
     acc["tilt_sum"] += (tilt * m).sum()
     acc["tilt_max"] = torch.maximum(acc["tilt_max"], (tilt * m).max())
     acc["tilt_hi"] += ((tilt > math.radians(10.0)).float() * m).sum()
@@ -174,9 +222,16 @@ class Evaluator:
     acc = {k: z() for k in (
       "n", "tilt_sum", "tilt_hi", "roll_sum", "roll_abs_sum", "both_down",
       "any_down", "gap_sum", "self_hit", "vx_sum", "vy_sum", "wz_sum",
-      "height_sum", "apex_sum", "apex_n", "lat_sum")}
+      "height_sum", "apex_sum", "apex_n", "lat_sum", "arate_sq", "ajerk_sq")}
     acc["tilt_max"] = z()
     acc["lat_max"] = z()
+    big = lambda v: torch.full((self.num_envs,), v, device=self.device)
+    for key in ("yrmax", "ylmax", "prmax", "plmax"):
+      acc[key] = big(-9.9)
+    for key in ("yrmin", "ylmin", "prmin", "plmin"):
+      acc[key] = big(9.9)
+    acc["roll_max"] = big(-9.9)
+    acc["roll_min"] = big(9.9)
     lat0 = torch.zeros(self.num_envs, device=self.device)
     acc["gap_min"] = torch.full((), 9.9, device=self.device)
     acc["inner_min"] = torch.full((), 9.9, device=self.device)
@@ -184,6 +239,7 @@ class Evaluator:
 
     heading_delta = torch.zeros(self.num_envs, device=self.device)
     prev_heading = None
+    cur = prev = prev2 = None
 
     for step in range(settle + measure):
       # The script owns the command; ramps still carry it there smoothly.
@@ -192,6 +248,7 @@ class Evaluator:
       gait.yaw_rate_target[:] = wz
       with torch.no_grad():
         action = policy(obs)
+      prev2, prev, cur = prev, cur, action.clone()
       obs, _, dones, _ = wrapped.step(action)
       alive &= dones == 0
 
@@ -211,7 +268,7 @@ class Evaluator:
         lat0 = lat_now.clone()
       if step >= settle:
         sinp = gait.command[:, 1]
-        self._measure(acc, alive, sinp)
+        self._measure(acc, alive, sinp, cur, prev, prev2)
         acc["lat_sum"] += ((lat_now - lat0).abs() * alive.float()).sum()
         acc["lat_max"] = torch.maximum(
           acc["lat_max"],
@@ -244,8 +301,23 @@ class Evaluator:
       "lateral_drift_mm": 1000.0 * float(acc["lat_sum"]) / n,
       "lateral_drift_max_mm": 1000.0 * float(acc["lat_max"]),
       "heading_change_deg": deg(float((heading_delta * live).sum()) / nlive),
+      "hip_pitch_swing_r_deg": deg(float(
+        (acc["prmax"] - acc["prmin"])[alive].mean()) if bool(alive.any()) else 0.0),
+      "hip_pitch_swing_l_deg": deg(float(
+        (acc["plmax"] - acc["plmin"])[alive].mean()) if bool(alive.any()) else 0.0),
+      "roll_p2p_deg": deg(float(
+        (acc["roll_max"] - acc["roll_min"])[alive].mean()) if bool(alive.any()) else 0.0),
+      "hip_yaw_swing_r_deg": deg(float(
+        (acc["yrmax"] - acc["yrmin"])[alive].mean()) if bool(alive.any()) else 0.0),
+      "hip_yaw_swing_l_deg": deg(float(
+        (acc["ylmax"] - acc["ylmin"])[alive].mean()) if bool(alive.any()) else 0.0),
+      "act_rate_rms": math.sqrt(max(float(acc["arate_sq"]) / n, 0.0)),
+      "act_jerk_rms": math.sqrt(max(float(acc["ajerk_sq"]) / n, 0.0)),
       "cmd_vx": vx, "cmd_wz": wz, "cmd_march": march, "window_s": window,
     }
+    out["hip_yaw_swing_ratio"] = (
+      out["hip_yaw_swing_r_deg"] / out["hip_yaw_swing_l_deg"]
+      if out["hip_yaw_swing_l_deg"] > 1e-6 else float("nan"))
     out["vx_ratio"] = out["vx_mps"] / vx if vx else float("nan")
     out["wz_ratio"] = out["wz_rps"] / wz if wz else float("nan")
     out["heading_rate_dps"] = out["heading_change_deg"] / window
@@ -257,11 +329,11 @@ class Evaluator:
       out["apex_min_mm"] = float("nan")
     return out
 
-  def run(self, checkpoint: Path, settle: int, measure: int):
+  def run(self, checkpoint: Path, settle: int, measure: int, phases=PHASES):
     policy = self.load(checkpoint)
     return {
       name: self.phase(policy, march, vx, wz, settle, measure)
-      for name, march, vx, wz in PHASES
+      for name, march, vx, wz in phases
     }
 
 
@@ -292,6 +364,12 @@ def score(res: dict) -> tuple[float, list[str]]:
              if not math.isnan(p["apex_mean_mm"]))
   drift = abs(res["fwd"]["heading_rate_dps"])
   hold_planted = res["hold"]["both_feet_down"]
+  ratios = [p["hip_yaw_swing_ratio"] for p in step_phases
+            if not math.isnan(p["hip_yaw_swing_ratio"])]
+  yawsym = sum(min(r, 1.0 / r) for r in ratios) / max(len(ratios), 1) if ratios else 0.0
+  arate = max(p["act_rate_rms"] for p in step_phases)
+  if arate > 1.15 * REFERENCE_ACT_RATE:
+    notes.append(f"JITTER act_rate {arate:.2f} vs ref {REFERENCE_ACT_RATE:.2f}")
 
   s = (
     3.0 * worst_survival
@@ -304,6 +382,8 @@ def score(res: dict) -> tuple[float, list[str]]:
     + 0.8 * clip01(gap / 12.0)                # 12 mm inner gap -> full credit
     + 0.8 * clip01(apex / 10.0)               # 10 mm apex -> full credit
     + 0.6 * clip01(1.0 - drift / 3.0)         # 3 deg/s straight-line drift
+    + 1.0 * clip01(1.0 - max(0.0, arate - REFERENCE_ACT_RATE) / 0.5)
+    + 1.5 * yawsym                            # hip-yaw swing symmetry, 1 = equal
   )
   if worst_survival < 0.90:
     s -= 5.0
@@ -318,20 +398,29 @@ def _fmt(name: str, p: dict) -> str:
           f"apex {p['apex_mean_mm']:5.1f}  "
           f"vx {p['vx_mps']:+.4f}({p['vx_ratio']:+.2f})  "
           f"wz {p['wz_rps']:+.3f}({p['wz_ratio']:+.2f})  "
-          f"drift {p['lateral_drift_mm']:5.1f}  yaw {p['heading_rate_dps']:+5.2f}/s")
+          f"drift {p['lateral_drift_mm']:5.1f}  yaw {p['heading_rate_dps']:+5.2f}/s"
+          f"  arate {p['act_rate_rms']:5.2f}"
+          f"  yawsym {p['hip_yaw_swing_ratio']:4.2f}"
+          f"  stride {p['hip_pitch_swing_r_deg']:4.1f}/{p['hip_pitch_swing_l_deg']:4.1f}"
+          f"  rollp2p {p['roll_p2p_deg']:5.2f}")
 
 
 def main() -> None:
   ap = argparse.ArgumentParser(
     description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   ap.add_argument("--task", default="Mjlab-Turn-K2")
-  ap.add_argument("--checkpoint", help="single model_*.pt to evaluate")
+  ap.add_argument("--checkpoint", nargs="+",
+                  help="one or more model_*.pt (one env build serves all)")
   ap.add_argument("--sweep", help="run directory; evaluate many checkpoints")
   ap.add_argument("--stride", type=int, default=200)
   ap.add_argument("--min-iter", type=int, default=0)
   ap.add_argument("--num-envs", type=int, default=128)
   ap.add_argument("--settle", type=int, default=150)
   ap.add_argument("--measure", type=int, default=500)
+  ap.add_argument("--vx", type=float, default=0.03,
+                  help="forward/backward test speed (default 0.03)")
+  ap.add_argument("--wz", type=float, default=0.20,
+                  help="turn-in-place test yaw rate (default 0.20)")
   ap.add_argument("--device", default="cuda:0")
   ap.add_argument("--json", help="write raw results here")
   args = ap.parse_args()
@@ -348,22 +437,23 @@ def main() -> None:
     if not checkpoints:
       raise SystemExit(f"no model_*.pt in {run_dir} matching stride {args.stride}")
   elif args.checkpoint:
-    checkpoints = [Path(args.checkpoint)]
+    checkpoints = [Path(c) for c in args.checkpoint]
   else:
     raise SystemExit("pass --checkpoint or --sweep")
 
+  phases = make_phases(args.vx, args.wz)
   ev = Evaluator(args.task, args.num_envs, args.device)
   print(f"\n{args.num_envs} randomized robots, {args.measure * ev.dt:.0f} s "
         f"measured per phase after a {args.settle * ev.dt:.0f} s settle\n")
   all_results = {}
   ranking = []
   for ckpt in checkpoints:
-    res = ev.run(ckpt, args.settle, args.measure)
+    res = ev.run(ckpt, args.settle, args.measure, phases)
     s, notes = score(res)
     all_results[ckpt.name] = res
     ranking.append((s, ckpt.name, notes))
     print(f"{ckpt.name}   SCORE {s:.3f}" + (f"   [{'; '.join(notes)}]" if notes else ""))
-    for name, _, _, _ in PHASES:
+    for name, _, _, _ in phases:
       print(_fmt(name, res[name]))
     print()
 
