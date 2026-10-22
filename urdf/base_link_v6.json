@@ -1,0 +1,334 @@
+{
+  "source": "Robot_v6 updated color export, edited v2; corrected orientation and lowered holders",
+  "visuals": [
+    {
+      "file": "base_link_v6_base_link_0.obj",
+      "rgba": "0 0 0 1"
+    },
+    {
+      "file": "base_link_v6_Hip_pitch_motor_right_0.obj",
+      "rgba": "0 0 0 1"
+    },
+    {
+      "file": "base_link_v6_Hip_pitch_motor_left_0.obj",
+      "rgba": "0 0 0 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_0.obj",
+      "rgba": "0.9176470588 0.9176470588 0.9176470588 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_1.obj",
+      "rgba": "0.5215686275 0.5215686275 0.5882352941 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_2.obj",
+      "rgba": "0.3803921569 0.2705882353 0.2156862745 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_3.obj",
+      "rgba": "0.3411764706 0.6784313725 0.4431372549 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_4.obj",
+      "rgba": "0.1490196078 0.1450980392 0.1450980392 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_5.obj",
+      "rgba": "0.7960784314 0.7960784314 0.7960784314 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_6.obj",
+      "rgba": "1 1 0 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_7.obj",
+      "rgba": "0.4823529412 0.5058823529 0.5294117647 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_8.obj",
+      "rgba": "0.8509803922 0.8274509804 0.7882352941 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_9.obj",
+      "rgba": "0.4 0.2745098039 0 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_10.obj",
+      "rgba": "0.9843137255 0.9803921569 0.9607843137 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_11.obj",
+      "rgba": "0.9647058824 0.9647058824 0.9529411765 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_12.obj",
+      "rgba": "0.8941176471 0.8901960784 0.8117647059 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_13.obj",
+      "rgba": "0.8588235294 0.737254902 0.4941176471 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_14.obj",
+      "rgba": "0.7803921569 0.568627451 0.1137254902 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_15.obj",
+      "rgba": "0.8235294118 0.8196078431 0.7803921569 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_16.obj",
+      "rgba": "0.3176470588 0.3176470588 0.3176470588 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_17.obj",
+      "rgba": "0.8156862745 0.8156862745 0.8156862745 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_18.obj",
+      "rgba": "0.6901960784 0.662745098 0.5960784314 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_19.obj",
+      "rgba": "0.8078431373 0.8431372549 0.8823529412 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_20.obj",
+      "rgba": "0.8 0.8 0.8 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_21.obj",
+      "rgba": "0.08235294118 0.0862745098 0.09411764706 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_22.obj",
+      "rgba": "0.2156862745 0.8 0.2039215686 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_23.obj",
+      "rgba": "0.7921568627 0.8196078431 0.9333333333 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_24.obj",
+      "rgba": "0.4509803922 0.4509803922 0.4509803922 1"
+    },
+    {
+      "file": "base_link_v6_servo_bus_adapter_25.obj",
+      "rgba": "1 1 1 1"
+    },
+    {
+      "file": "base_link_v6_imu_0.obj",
+      "rgba": "0.9803921569 0.9803921569 0.9803921569 1"
+    },
+    {
+      "file": "base_link_v6_imu_1.obj",
+      "rgba": "0.7843137255 0.6862745098 0.3921568627 1"
+    },
+    {
+      "file": "base_link_v6_imu_2.obj",
+      "rgba": "0.1568627451 0.03921568627 0.3921568627 1"
+    },
+    {
+      "file": "base_link_v6_imu_3.obj",
+      "rgba": "0.8823529412 0.8823529412 0.8823529412 1"
+    },
+    {
+      "file": "base_link_v6_imu_4.obj",
+      "rgba": "0.8823529412 0.8823529412 0.7843137255 1"
+    },
+    {
+      "file": "base_link_v6_imu_5.obj",
+      "rgba": "0.09803921569 0.09803921569 0.09803921569 1"
+    },
+    {
+      "file": "base_link_v6_battery_0.obj",
+      "rgba": "0 0 0 1"
+    },
+    {
+      "file": "base_link_v6_battery_1.obj",
+      "rgba": "1 1 1 1"
+    },
+    {
+      "file": "base_link_v6_battery_2.obj",
+      "rgba": "0.6980392157 0.6980392157 0.6980392157 1"
+    },
+    {
+      "file": "base_link_v6_battery_3.obj",
+      "rgba": "0.05098039216 0.6156862745 0.05098039216 1"
+    },
+    {
+      "file": "base_link_v6_battery_4.obj",
+      "rgba": "0.8666666667 0.4862745098 0.05882352941 1"
+    },
+    {
+      "file": "base_link_v6_battery_5.obj",
+      "rgba": "0.3921568627 0.6 0.3921568627 1"
+    },
+    {
+      "file": "base_link_v6_battery_6.obj",
+      "rgba": "0.09411764706 0.1450980392 0.9725490196 1"
+    },
+    {
+      "file": "base_link_v6_battery_7.obj",
+      "rgba": "1 0.5019607843 0.7490196078 1"
+    },
+    {
+      "file": "base_link_v6_battery_8.obj",
+      "rgba": "0.7490196078 0.7490196078 0.7490196078 1"
+    },
+    {
+      "file": "base_link_v6_battery_9.obj",
+      "rgba": "0.968627451 0.9333333333 0.7921568627 1"
+    },
+    {
+      "file": "base_link_v6_battery_10.obj",
+      "rgba": "0.6980392157 0 0 1"
+    },
+    {
+      "file": "base_link_v6_battery_11.obj",
+      "rgba": "0.1215686275 0.7490196078 0.1215686275 1"
+    },
+    {
+      "file": "base_link_v6_battery_12.obj",
+      "rgba": "0 0.5019607843 0 1"
+    },
+    {
+      "file": "base_link_v6_battery_13.obj",
+      "rgba": "0.2509803922 0.2509803922 0.2509803922 1"
+    },
+    {
+      "file": "base_link_v6_battery_14.obj",
+      "rgba": "0.7490196078 0.6392156863 0.5254901961 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_0.obj",
+      "rgba": "0.9843137255 0.9803921569 0.9607843137 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_1.obj",
+      "rgba": "0.9647058824 0.9647058824 0.9529411765 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_2.obj",
+      "rgba": "1 1 1 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_3.obj",
+      "rgba": "0.09803921569 0.09803921569 0.09803921569 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_4.obj",
+      "rgba": "0.2509803922 0.2509803922 0.2509803922 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_5.obj",
+      "rgba": "0.5019607843 0.5019607843 0.5019607843 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_6.obj",
+      "rgba": "0.6274509804 0.6274509804 0.6274509804 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_7.obj",
+      "rgba": "0.5647058824 0.3764705882 0 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_8.obj",
+      "rgba": "0.9568627451 0.8980392157 0.6549019608 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_9.obj",
+      "rgba": "0.9529411765 0.7960784314 0.4862745098 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_10.obj",
+      "rgba": "0.7333333333 0.7725490196 0.7960784314 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_11.obj",
+      "rgba": "0.8431372549 0.8156862745 0.7529411765 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_12.obj",
+      "rgba": "0.01960784314 0.01960784314 0.01960784314 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_13.obj",
+      "rgba": "0.3019607843 0.3019607843 0.3019607843 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_14.obj",
+      "rgba": "0.5098039216 0.4549019608 0.3725490196 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_15.obj",
+      "rgba": "0.737254902 0.3137254902 0.1843137255 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_16.obj",
+      "rgba": "0.768627451 0.768627451 0.768627451 1"
+    },
+    {
+      "file": "base_link_v6_camera_controller_17.obj",
+      "rgba": "0.2980392157 0.2980392157 0.2980392157 1"
+    },
+    {
+      "file": "base_link_v6_power_converter_0.obj",
+      "rgba": "0 0 0 1"
+    },
+    {
+      "file": "base_link_v6_torso_Body22_0.obj",
+      "rgba": "0.968627451 0.02352941176 0.02352941176 1"
+    },
+    {
+      "file": "base_link_v6_torso_Body23_0.obj",
+      "rgba": "0.968627451 0.02352941176 0.02352941176 1"
+    }
+  ],
+  "mass_kg": 0.375,
+  "com": [
+    0.030002595031082116,
+    0.030730254855419064,
+    0.004094461570628874
+  ],
+  "inertia": [
+    [
+      0.0003315163897843509,
+      2.585735329965761e-06,
+      -6.879544346014043e-07
+    ],
+    [
+      2.585735329965761e-06,
+      0.0007818458455865923,
+      4.000262228645309e-05
+    ],
+    [
+      -6.879544346014043e-07,
+      4.000262228645309e-05,
+      0.0006511899154085748
+    ]
+  ],
+  "imu_pos": [
+    0.027957760048440004,
+    0.049456911425,
+    -0.0011066111109997853
+  ],
+  "parts": [
+    "base_link",
+    "Hip_pitch_motor_right",
+    "Hip_pitch_motor_left",
+    "servo_bus_adapter",
+    "imu",
+    "battery",
+    "camera_controller",
+    "power_converter",
+    "torso_Body22",
+    "torso_Body23"
+  ],
+  "alignment_translation": [
+    0.028000000000000004,
+    -0.025356329755,
+    2.146748928e-16
+  ]
+}

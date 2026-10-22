@@ -1,0 +1,30 @@
+{
+  "home_raw": {
+    "hip_pitch_R": 1698,
+    "hip_roll_R": 3170,
+    "hip_yaw_R": 1835,
+    "knee_R": 2330,
+    "ankle_pitch_R": 2581,
+    "ankle_roll_R": 2358,
+    "hip_pitch_L": 1926,
+    "hip_roll_L": 2353,
+    "hip_yaw_L": 2272,
+    "knee_L": 2267,
+    "ankle_pitch_L": 1760,
+    "ankle_roll_L": 2027
+  },
+  "sign": {
+    "hip_pitch_R": -1,
+    "hip_roll_R": -1,
+    "hip_yaw_R": -1,
+    "knee_R": -1,
+    "ankle_pitch_R": -1,
+    "ankle_roll_R": -1,
+    "hip_pitch_L": 1,
+    "hip_roll_L": 1,
+    "hip_yaw_L": 1,
+    "knee_L": 1,
+    "ankle_pitch_L": 1,
+    "ankle_roll_L": 1
+  }
+}

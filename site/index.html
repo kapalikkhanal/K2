@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K2 — open-source 3D-printed 12-DOF biped</title>
+<meta name="description" content="K2 is an open-source, 3D-printed 12-DOF biped robot driven by a reinforcement-learning policy, tested on Raspberry Pi 5 and Seeed XIAO ESP32S3.">
+<meta property="og:title" content="K2 — open-source 3D-printed 12-DOF biped">
+<meta property="og:description" content="12 Feetech STS3215 servos, an RL walking policy, and firmware small enough to run onboard an ESP32-S3.">
+<meta property="og:image" content="assets/img/k2_robot.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦿</text></svg>">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="./">K<span>2</span></a>
+    <div class="links">
+      <a href="#videos">Video</a>
+      <a href="viewer.html">Joint viewer</a>
+      <a href="#build">Build</a>
+      <a href="#software">Software</a>
+      <a href="#status">Status</a>
+      <a href="https://github.com/kapalikkhanal/K2">GitHub&nbsp;↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>A 12-DOF biped<br>you can <em>print</em>.</h1>
+    <p class="lede">K2 is an open-source, 3D-printed bipedal robot built on twelve Feetech
+      STS3215 serial-bus servos. A reinforcement-learning policy holds, marches, walks
+      forward and backward, turns, and steps laterally. The same policy has been tested
+      on the physical robot from a <strong>Raspberry Pi 5</strong> and from a
+      <strong>Seeed XIAO ESP32S3</strong> running the network onboard.</p>
+    <ul class="chips">
+      <li><b>12</b> degrees of freedom</li>
+      <li><b>≈0.45 m</b> tall</li>
+      <li><b>~$224</b> parts subtotal</li>
+      <li><b>50</b> observations → <b>12</b> actions</li>
+      <li><b>MIT</b> licensed</li>
+    </ul>
+    <div class="btns">
+      <a class="btn primary" href="viewer.html">Explore the joints →</a>
+      <a class="btn" href="#build">Build one</a>
+      <a class="btn" href="https://github.com/kapalikkhanal/K2">Source on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<section id="videos">
+  <div class="wrap">
+    <h2>Demonstrations</h2>
+    <p class="sub">The robot, moving.</p>
+    <div class="videos" id="video-grid"></div>
+  </div>
+</section>
+
+<section id="skills">
+  <div class="wrap">
+    <h2>Capabilities</h2>
+    <p class="sub">What the shipped policy actually does.</p>
+    <div class="grid c3">
+      <div class="card"><h3>Hold <span class="tag">tested</span></h3><p>Learned standing hold. Releasing every control requests hold rather than latching the last motion.</p></div>
+      <div class="card"><h3>March <span class="tag">tested</span></h3><p>Stepping in place at the policy's gait frequency, the entry point to every travelling gait.</p></div>
+      <div class="card"><h3>Walk <span class="tag">tested</span></h3><p>Forward and backward, trained to ±0.05 m/s. Backward is a sign flip of the forward task.</p></div>
+      <div class="card"><h3>Turn <span class="tag">tested</span></h3><p>Yaw on top of forward/backward travel, trained to ±0.30 rad/s.</p></div>
+      <div class="card"><h3>Lateral <span class="tag">tested</span></h3><p>Side-stepping, trained to ±0.03 m/s, with leading-foot selection in the command profile.</p></div>
+      <div class="card"><h3>Height &amp; planted rotation <span class="tag no">not shipped</span></h3><p>Body-height control and feet-planted rotation are <em>not</em> part of the released policy.</p></div>
+    </div>
+    <div class="note"><p><b>Acceleration is deliberate.</b> Both the web and joystick paths keep the
+      trained acceleration and jerk limits, so reaching maximum speed is gradual. Commands
+      expire after 500&nbsp;ms without a refresh, which requests a smooth stop rather than
+      freezing the last command.</p></div>
+  </div>
+</section>
+
+<section id="viewer-promo">
+  <div class="wrap">
+    <h2>Interactive model</h2>
+    <p class="sub">See which servo moves which joint.</p>
+    <div class="grid c2">
+      <div>
+        <p>The joint viewer loads K2's model in the browser and gives you a slider for each
+          of the twelve joints. Every slider is labelled with the <strong>servo ID on the
+          bus</strong>, its operational limit, and a plain-language description of what a
+          positive command does to that leg.</p>
+        <p>The geometry is baked straight out of <code>mjcf/k2_physics.xml</code> — the model
+          the policy actually trains on — and the limits from
+          <code>hardware/joint_limits.json</code>, the ranges the robot actually runs. The
+          browser's kinematics are checked against MuJoCo's own forward kinematics at build
+          time, so what you drag is what the robot does.</p>
+        <div class="btns"><a class="btn primary" href="viewer.html">Open the joint viewer →</a></div>
+      </div>
+      <div><a href="viewer.html"><img src="assets/img/k2_robot.png" alt="K2 biped: front, isometric and side views" style="width:100%;border:1px solid var(--line);border-radius:12px;display:block"></a></div>
+    </div>
+  </div>
+</section>
+
+<section id="build">
+  <div class="wrap">
+    <h2>Build</h2>
+    <p class="sub">Print eighteen parts, then populate them with servos.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Printed part</th><th>Qty</th><th class="num">STL</th></tr></thead>
+        <tbody id="parts"></tbody>
+      </table>
+    </div>
+    <div class="note"><p><b>Not yet a complete kit.</b> There is no assembly guide, print-settings
+      sheet, exploded view or wiring diagram in the repository yet, and no editable CAD
+      (<code>.f3d</code>/<code>.step</code>) — only meshes. Treat these STLs as a working
+      research release rather than a finished build package.</p></div>
+
+    <h3 style="margin:44px 0 14px;font-size:19px">Bill of materials</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Component</th><th class="num">Qty</th><th class="num">Cost (USD)</th></tr></thead>
+        <tbody>
+          <tr><td>Feetech STS3215 serial bus servo</td><td class="num">12</td><td class="num">$180</td></tr>
+          <tr><td>LSM6DS3 I²C IMU breakout</td><td class="num">1</td><td class="num">~$5</td></tr>
+          <tr><td>Waveshare serial bus servo driver (TTL UART)</td><td class="num">1</td><td class="num">~$10</td></tr>
+          <tr><td>12 V → 5 V DC/DC converter</td><td class="num">1</td><td class="num">~$3–4</td></tr>
+          <tr><td>12 V power supply</td><td class="num">1</td><td class="num">~$20</td></tr>
+          <tr><td>Wiring</td><td class="num">set</td><td class="num">~$6</td></tr>
+          <tr><td>Seeed XIAO ESP32S3 Sense <em>or</em> Raspberry Pi 5</td><td class="num">1</td><td class="num">not included</td></tr>
+          <tr><td>Printed parts, fasteners, mechanical hardware</td><td class="num">set</td><td class="num">not measured</td></tr>
+          <tr><td><strong>Subtotal before controller, printing and shipping</strong></td><td class="num"></td><td class="num"><strong>$224–225</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px;font-size:14px">These are the builder's estimates, not a complete retail BOM.
+      A <a href="https://www.dfrobot.com/product-2962.html">DFRobot listing</a> checked on
+      8&nbsp;September&nbsp;2026 prices a 12&nbsp;V ST3215 variant at $19.90, which raises the
+      subtotal to about $283. Confirm the servo voltage and variant before ordering.</p>
+
+    <h3 style="margin:44px 0 14px;font-size:19px">Wiring the ESP32-S3</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Peripheral</th><th>XIAO pin</th></tr></thead>
+        <tbody>
+          <tr><td>LSM6DS3 SDA</td><td><code>D4 / GPIO5</code></td></tr>
+          <tr><td>LSM6DS3 SCL</td><td><code>D5 / GPIO6</code></td></tr>
+          <tr><td>Servo driver RX</td><td><code>D6 / GPIO43</code> (ESP TX)</td></tr>
+          <tr><td>Servo driver TX</td><td><code>D7 / GPIO44</code> (ESP RX)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:16px;font-size:14px">Share ground. The Waveshare driver must be set to
+      TTL, not USB. The servo UART runs at 1&nbsp;Mbps. Full procedure in the
+      <a href="https://github.com/kapalikkhanal/K2/blob/main/esp32-s3/README.md">ESP32-S3 README</a>.</p>
+  </div>
+</section>
+
+<section id="software">
+  <div class="wrap">
+    <h2>Software</h2>
+    <p class="sub">Drive the digital twin without owning a robot.</p>
+    <p>The same controller code drives MuJoCo or the real servo chain — <code>--bus</code> is
+      the only thing that changes. On a Linux desktop with a graphical session, no GPU
+      training stack or physical hardware is needed:</p>
+<pre><code>git clone https://github.com/kapalikkhanal/K2.git &amp;&amp; cd K2
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r hardware/requirements-pi.txt
+
+python keyboard.py --policy policies/last_policy.onnx</code></pre>
+    <p>Focus the MuJoCo viewer to use the keys. <code>--policy</code> takes an ONNX file, not a
+      training <code>.pt</code> checkpoint; omitting it selects the shipped policy.</p>
+    <div class="grid c3" style="margin-top:26px">
+      <div class="card"><span class="k">±0.05 <small>m/s</small></span><p>Trained forward / backward speed</p></div>
+      <div class="card"><span class="k">±0.03 <small>m/s</small></span><p>Trained lateral speed</p></div>
+      <div class="card"><span class="k">±0.30 <small>rad/s</small></span><p>Trained yaw rate</p></div>
+    </div>
+    <div class="grid c2" style="margin-top:18px">
+      <div class="card"><h3>Policy network</h3><p>50 observations → 256–128–64 → 12 actions, exported to ONNX. Channel 5 of the gait command is lateral velocity.</p></div>
+      <div class="card"><h3>Onboard firmware</h3><p>The C++ command profile mirrors the Python <code>smooth_full_v1</code> profile, including deceleration, double-support stopping and lateral leading-foot selection.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="docs">
+  <div class="wrap">
+    <h2>Documentation</h2>
+    <p class="sub">Everything is in the repository.</p>
+    <div class="grid c3">
+      <div class="card"><h3><a href="https://github.com/kapalikkhanal/K2/blob/main/README.md">README</a></h3><p>Hardware, BOM, every keyboard option and the simulator quick start.</p></div>
+      <div class="card"><h3><a href="https://github.com/kapalikkhanal/K2/blob/main/robot.md">robot.md</a></h3><p>The robot's design and conventions in depth.</p></div>
+      <div class="card"><h3><a href="https://github.com/kapalikkhanal/K2/blob/main/docs/full_training.md">Training guide</a></h3><p>The two-stage mjlab + PPO pipeline and ONNX export.</p></div>
+      <div class="card"><h3><a href="https://github.com/kapalikkhanal/K2/blob/main/docs/transforms.md">Transforms</a></h3><p>Frames, joint conventions and the CAD-to-simulation path.</p></div>
+      <div class="card"><h3><a href="https://github.com/kapalikkhanal/K2/blob/main/esp32-s3/README.md">ESP32-S3</a></h3><p>Wiring, phone control, Xbox BLE pairing and native verification.</p></div>
+      <div class="card"><h3><a href="https://github.com/kapalikkhanal/K2/blob/main/docs/turn_lateral_training.md">Turn &amp; lateral training</a></h3><p>Staging, evaluating and exporting the shipped turn-and-lateral policy.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="status">
+  <div class="wrap">
+    <h2>Status</h2>
+    <p class="sub">What is proven, and what is not.</p>
+    <div class="grid c2">
+      <div class="card"><h3>Demonstrated</h3><p>Maintainer-tested physical operation on both controllers, with the shipped policy, on the original robot. Launcher regression tests pass, and the ESP32 build is verified against the Python implementation on the host.</p></div>
+      <div class="card"><h3>Not established</h3><p>Rough-terrain reliability, endurance, and performance across independently built robots are not quantified. Host verification is not a physical test, and one robot is not a sample.</p></div>
+    </div>
+    <div class="note"><p><b>Safety.</b> The ESP32 web interface runs an access point with a documented
+      default password and unauthenticated local control endpoints. Use it on a trusted
+      local network, change the password for public demonstrations, and never expose it to
+      the internet. Support the robot before enabling torque.</p></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>K2 — MIT licensed</span>
+    <a href="https://github.com/kapalikkhanal/K2">github.com/kapalikkhanal/K2</a>
+    <a href="https://github.com/kapalikkhanal/K2/blob/main/LICENSE">License</a>
+    <a href="viewer.html">Joint viewer</a>
+  </div>
+</footer>
+
+<script>
+/* ---------------------------------------------------------------------------
+   VIDEOS — paste a YouTube ID into `id` to replace a placeholder.
+   For https://www.youtube.com/watch?v=dQw4w9WgXcQ the id is "dQw4w9WgXcQ".
+   Leave id as null to keep showing the placeholder tile.
+--------------------------------------------------------------------------- */
+const VIDEOS = [
+  { id: null, title: "Walking forward and backward", note: "Trained to ±0.05 m/s" },
+  { id: null, title: "Turning",                      note: "Yaw on top of travel, ±0.30 rad/s" },
+  { id: null, title: "Lateral stepping",             note: "Side-stepping to ±0.03 m/s" },
+  { id: null, title: "Running onboard the ESP32-S3", note: "Policy inference on the XIAO, phone control" },
+];
+
+document.getElementById("video-grid").innerHTML = VIDEOS.map(v => `
+  <figure class="vid" style="margin:0">
+    <div class="frame">${v.id
+      ? `<iframe src="https://www.youtube-nocookie.com/embed/${v.id}" title="${v.title}"
+           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+           referrerpolicy="strict-origin-when-cross-origin" allowfullscreen loading="lazy"></iframe>`
+      : `<div class="ph"><span>▶ video slot</span><span>add a YouTube ID in index.html</span></div>`}
+    </div>
+    <figcaption class="cap"><b>${v.title}</b>${v.note}</figcaption>
+  </figure>`).join("");
+
+/* Printed parts. Sizes are of the STL files in 3D-Files/K2/. */
+const RAW = "https://raw.githubusercontent.com/kapalikkhanal/K2/main/3D-Files/K2/";
+const PARTS = [
+  ["base_link.stl", 1, "560K"], ["Base_link_lid.stl", 1, "172K"],
+  ["Base_link_controller_holder.stl", 1, "484K"], ["Handle.stl", 1, "140K"],
+  ["Hip_pitch_left.stl", 1, "236K"], ["Hip_pitch_right.stl", 1, "236K"],
+  ["Hip_roll_left.stl", 1, "264K"], ["Hip_roll_right.stl", 1, "264K"],
+  ["Hip_yaw_left.stl", 1, "276K"], ["Hip_yaw_right.stl", 1, "276K"],
+  ["Knee_left.stl", 1, "180K"], ["Knee_right.stl", 1, "180K"],
+  ["Ankle_left.stl", 1, "452K"], ["Ankle_right.stl", 1, "452K"],
+  ["Feet_left.stl", 1, "160K"], ["Feet_right.stl", 1, "160K"],
+  ["Left_leg_sole.stl", 1, "32K"], ["Right_leg_sole.stl", 1, "32K"],
+];
+document.getElementById("parts").innerHTML = PARTS.map(([f, q, s]) => `
+  <tr><td>${f.replace(/\.stl$/, "").replace(/_/g, " ")}</td><td>${q}</td>
+      <td class="num"><a href="${RAW}${f}" download>${s} ↓</a></td></tr>`).join("");
+</script>
+</body>
+</html>

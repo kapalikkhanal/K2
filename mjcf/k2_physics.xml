@@ -1,0 +1,282 @@
+<mujoco model="k2">
+  <compiler angle="radian" meshdir="../meshes/K2" autolimits="true" />
+  <asset>
+    <mesh name="Hip_pitch_right" content_type="model/obj" file="Hip_pitch_right.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_pitch_right_collision" content_type="model/stl" file="Hip_pitch_right_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_pitch_left" content_type="model/obj" file="Hip_pitch_left.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_pitch_left_collision" content_type="model/stl" file="Hip_pitch_left_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_roll_right" content_type="model/obj" file="Hip_roll_right.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_roll_right_collision" content_type="model/stl" file="Hip_roll_right_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_roll_left" content_type="model/obj" file="Hip_roll_left.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_roll_left_collision" content_type="model/stl" file="Hip_roll_left_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_yaw_right" content_type="model/obj" file="Hip_yaw_right.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_yaw_right_collision" content_type="model/stl" file="Hip_yaw_right_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_yaw_left" content_type="model/obj" file="Hip_yaw_left.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Hip_yaw_left_collision" content_type="model/stl" file="Hip_yaw_left_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Knee_right" content_type="model/obj" file="Knee_right.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Knee_right_collision" content_type="model/stl" file="Knee_right_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Knee_left" content_type="model/obj" file="Knee_left.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Knee_left_collision" content_type="model/stl" file="Knee_left_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Ankle_right" content_type="model/obj" file="Ankle_right.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Ankle_right_collision" content_type="model/stl" file="Ankle_right_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Ankle_left" content_type="model/obj" file="Ankle_left.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Ankle_left_collision" content_type="model/stl" file="Ankle_left_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Feet_right" content_type="model/obj" file="Feet_right.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Feet_right_collision" content_type="model/stl" file="Feet_right_collision.stl" scale="0.01 0.01 0.01" />
+    <mesh name="Feet_left" content_type="model/obj" file="Feet_left.obj" scale="0.01 0.01 0.01" />
+    <mesh name="Feet_left_collision" content_type="model/stl" file="Feet_left_collision.stl" scale="0.01 0.01 0.01" />
+    <texture type="2d" name="groundplane" builtin="checker" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" width="512" height="512" />
+    <material name="groundplane" texture="groundplane" texrepeat="5 5" reflectance="0.1" />
+    <mesh name="base_link_v6_base_link_0" file="base_link_v6_base_link_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_Hip_pitch_motor_right_0" file="base_link_v6_Hip_pitch_motor_right_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_Hip_pitch_motor_left_0" file="base_link_v6_Hip_pitch_motor_left_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_0" file="base_link_v6_servo_bus_adapter_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_1" file="base_link_v6_servo_bus_adapter_1.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_2" file="base_link_v6_servo_bus_adapter_2.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_3" file="base_link_v6_servo_bus_adapter_3.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_4" file="base_link_v6_servo_bus_adapter_4.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_5" file="base_link_v6_servo_bus_adapter_5.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_6" file="base_link_v6_servo_bus_adapter_6.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_7" file="base_link_v6_servo_bus_adapter_7.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_8" file="base_link_v6_servo_bus_adapter_8.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_9" file="base_link_v6_servo_bus_adapter_9.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_10" file="base_link_v6_servo_bus_adapter_10.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_11" file="base_link_v6_servo_bus_adapter_11.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_12" file="base_link_v6_servo_bus_adapter_12.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_13" file="base_link_v6_servo_bus_adapter_13.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_14" file="base_link_v6_servo_bus_adapter_14.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_15" file="base_link_v6_servo_bus_adapter_15.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_16" file="base_link_v6_servo_bus_adapter_16.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_17" file="base_link_v6_servo_bus_adapter_17.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_18" file="base_link_v6_servo_bus_adapter_18.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_19" file="base_link_v6_servo_bus_adapter_19.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_20" file="base_link_v6_servo_bus_adapter_20.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_21" file="base_link_v6_servo_bus_adapter_21.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_22" file="base_link_v6_servo_bus_adapter_22.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_23" file="base_link_v6_servo_bus_adapter_23.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_24" file="base_link_v6_servo_bus_adapter_24.obj" inertia="shell" />
+    <mesh name="base_link_v6_servo_bus_adapter_25" file="base_link_v6_servo_bus_adapter_25.obj" inertia="shell" />
+    <mesh name="base_link_v6_imu_0" file="base_link_v6_imu_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_imu_1" file="base_link_v6_imu_1.obj" inertia="shell" />
+    <mesh name="base_link_v6_imu_2" file="base_link_v6_imu_2.obj" inertia="shell" />
+    <mesh name="base_link_v6_imu_3" file="base_link_v6_imu_3.obj" inertia="shell" />
+    <mesh name="base_link_v6_imu_4" file="base_link_v6_imu_4.obj" inertia="shell" />
+    <mesh name="base_link_v6_imu_5" file="base_link_v6_imu_5.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_0" file="base_link_v6_battery_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_1" file="base_link_v6_battery_1.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_2" file="base_link_v6_battery_2.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_3" file="base_link_v6_battery_3.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_4" file="base_link_v6_battery_4.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_5" file="base_link_v6_battery_5.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_6" file="base_link_v6_battery_6.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_7" file="base_link_v6_battery_7.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_8" file="base_link_v6_battery_8.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_9" file="base_link_v6_battery_9.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_10" file="base_link_v6_battery_10.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_11" file="base_link_v6_battery_11.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_12" file="base_link_v6_battery_12.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_13" file="base_link_v6_battery_13.obj" inertia="shell" />
+    <mesh name="base_link_v6_battery_14" file="base_link_v6_battery_14.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_0" file="base_link_v6_camera_controller_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_1" file="base_link_v6_camera_controller_1.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_2" file="base_link_v6_camera_controller_2.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_3" file="base_link_v6_camera_controller_3.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_4" file="base_link_v6_camera_controller_4.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_5" file="base_link_v6_camera_controller_5.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_6" file="base_link_v6_camera_controller_6.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_7" file="base_link_v6_camera_controller_7.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_8" file="base_link_v6_camera_controller_8.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_9" file="base_link_v6_camera_controller_9.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_10" file="base_link_v6_camera_controller_10.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_11" file="base_link_v6_camera_controller_11.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_12" file="base_link_v6_camera_controller_12.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_13" file="base_link_v6_camera_controller_13.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_14" file="base_link_v6_camera_controller_14.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_15" file="base_link_v6_camera_controller_15.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_16" file="base_link_v6_camera_controller_16.obj" inertia="shell" />
+    <mesh name="base_link_v6_camera_controller_17" file="base_link_v6_camera_controller_17.obj" inertia="shell" />
+    <mesh name="base_link_v6_power_converter_0" file="base_link_v6_power_converter_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_torso_Body22_0" file="base_link_v6_torso_Body22_0.obj" inertia="shell" />
+    <mesh name="base_link_v6_torso_Body23_0" file="base_link_v6_torso_Body23_0.obj" inertia="shell" />
+  </asset>
+  <worldbody>
+    <body name="k2_root" pos="0 0 0.314224" quat="1 0 0 0">
+      <freejoint name="floating_base" />
+      <body name="base_link" pos="-0.027327 0.000624 0" quat="0.5 0.5 0.5 0.5">
+        <inertial pos="0.00200259503 0.0560862549 0.00409446157" mass="0.375" fullinertia="0.00033151639 0.000781845846 0.000651189915 2.58573533e-06 -6.87954435e-07 4.00026223e-05" />
+        <body name="hip_pitch_right" pos="0.062625 0.002806 0">
+          <inertial pos="-0.003489 -0.006893 4.3e-05" quat="0.59469 0.384355 -0.591229 0.386088" mass="0.0811267606" diaginertia="2.58849754e-05 2.50053962e-05 3.79860037e-06" />
+          <joint name="base_link_hip_pitch_right_joint" pos="0 0 0" axis="1 0 0" range="-1.0472 1.0472" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+          <geom pos="-0.062753 -0.00289 0" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.78 0.11 0.13 1" mesh="Hip_pitch_right" />
+          <geom pos="-0.062753 -0.00289 0" quat="1 0 0 0" type="mesh" rgba="0.78 0.11 0.13 1" mesh="Hip_pitch_right_collision" contype="0" conaffinity="0" group="3" />
+          <body name="hip_roll_right" pos="-0.017459 -0.054923 0.019072">
+            <inertial pos="-0.002929 -0.012425 -0.00554" quat="0.54776 0.820599 -0.160987 -0.0256802" mass="0.0923129136" diaginertia="5.37733582e-05 5.2696881e-05 9.91466757e-06" />
+            <joint name="hip_pitch_hip_roll_right_joint" pos="0 0 0" axis="0 0 1" range="-0.785398 0.785398" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+            <geom pos="-0.045273 0.052 -0.01921" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.13 0.13 0.14 1" mesh="Hip_roll_right" />
+            <geom pos="-0.045273 0.052 -0.01921" quat="1 0 0 0" type="mesh" rgba="0.13 0.13 0.14 1" mesh="Hip_roll_right_collision" contype="0" conaffinity="0" group="3" />
+            <body name="hip_yaw_right" pos="0.004021 -0.064534 -0.018738">
+              <inertial pos="-0.001476 -0.003453 -7.3e-05" quat="0.570561 0.405631 -0.586006 0.408069" mass="0.0761310029" diaginertia="9.69609231e-06 9.24617003e-06 1.97225997e-06" />
+              <joint name="hip_roll_hip_yaw_right_joint" pos="0 0 0" axis="0 -1 0" range="-1.5708 1.5708" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+              <geom pos="-0.049294 0.116783 -0.000472" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.78 0.11 0.13 1" mesh="Hip_yaw_right" />
+              <geom pos="-0.049294 0.116783 -0.000472" quat="1 0 0 0" type="mesh" rgba="0.78 0.11 0.13 1" mesh="Hip_yaw_right_collision" contype="0" conaffinity="0" group="3" />
+              <body name="Knee_right" pos="-0.0291 -0.040651 -0.0005">
+                <inertial pos="0.005825 -0.014694 0.00122" quat="0.419175 0.540063 -0.425113 0.593214" mass="0.0944849822" diaginertia="8.33048023e-05 7.62425386e-05 1.01457431e-05" />
+                <joint name="hip_yaw_knee_right_joint" pos="0 0 0" axis="-1 0 0" range="-1.5708 0.261799" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+                <geom pos="-0.05735 0.0255 0" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.13 0.13 0.14 1" mesh="Knee_right" />
+                <geom pos="-0.05735 0.0255 0" quat="1 0 0 0" type="mesh" rgba="0.13 0.13 0.14 1" mesh="Knee_right_collision" contype="0" conaffinity="0" group="3" />
+                <body name="ankle_right" pos="0.0375 -0.094922 0">
+                  <inertial pos="-0.005655 -0.003784 -0.004105" quat="-0.117443 0.433775 0.273912 0.850305" mass="0.0890548108" diaginertia="2.5040801e-05 2.36713117e-05 7.79804107e-06" />
+                  <joint name="knee_ankle_pitch_right_joint" pos="0 0 0" axis="-1 0 0" range="-0.436332 1.22173" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+                  <geom pos="-0.057474 0.252434 2.8e-05" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.78 0.11 0.13 1" mesh="Ankle_right" />
+                  <geom pos="-0.057474 0.252434 2.8e-05" quat="1 0 0 0" type="mesh" rgba="0.78 0.11 0.13 1" mesh="Ankle_right_collision" contype="0" conaffinity="0" group="3" />
+                  <body name="Feet_right" pos="-0.00943 -0.028 0.0023">
+                    <inertial mass="0.0803665366" pos="-0.001417 -0.004521 0.000282" fullinertia="1.977837265e-05 1.577394725e-05 1.27403664e-05 -2.632917994e-06 1.092181531e-06 1.541545182e-06" />
+                    <joint name="ankle_roll_foot_right_joint" pos="0 0 0" axis="0 0 1" range="-0.349066 0.698132" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+                    <geom pos="-0.085513 0.308434 -0.002458" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.13 0.13 0.14 1" mesh="Feet_right" />
+                    <geom pos="-0.085513 0.308434 -0.002458" quat="1 0 0 0" type="mesh" rgba="0.13 0.13 0.14 1" mesh="Feet_right_collision" contype="1" conaffinity="1" condim="3" priority="1" friction="0.8 0.02 0.001" name="right_foot_collision" />
+                    <site name="right_foot" pos="-0.014959 -0.032 0.025678" size="0.005" rgba="0 1 0 1" group="5" />
+                    <site name="right_foot_heel" pos="-0.02426 -0.032 -0.04325" size="0.004" rgba="0 0.6 1 1" group="5" />
+                    <site name="right_foot_toe" pos="-0.00976 -0.032 0.06186" size="0.004" rgba="0 0.6 1 1" group="5" />
+                    <site name="right_foot_inner" pos="-0.03726 -0.032 0.03436" size="0.004" rgba="1 0.3 0.8 1" group="5" />
+                    <site name="right_foot_outer" pos="0.01794 -0.032 0.03436" size="0.004" rgba="1 0.3 0.8 1" group="5" />
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+        <body name="hip_pitch_left" pos="-0.062625 0.002806 0" quat="0 1.73205e-07 -1 -1.73205e-07">
+          <inertial pos="-0.003489 -0.006893 -4.3e-05" quat="0.591229 0.386089 -0.59469 0.384354" mass="0.0811267606" diaginertia="2.58849754e-05 2.50053962e-05 3.79860037e-06" />
+          <joint name="base_link_hip_pitch_left_joint" pos="0 0 0" axis="-1 0 0" range="-1.0472 1.0472" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+          <geom pos="-0.062753 -0.00289 0" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.78 0.11 0.13 1" mesh="Hip_pitch_left" />
+          <geom pos="-0.062753 -0.00289 0" quat="1 0 0 0" type="mesh" rgba="0.78 0.11 0.13 1" mesh="Hip_pitch_left_collision" contype="0" conaffinity="0" group="3" />
+          <body name="hip_roll_left" pos="-0.017459 -0.054923 -0.019072">
+            <inertial pos="-0.002929 -0.012425 0.00554" quat="0.820599 0.54776 -0.0256804 -0.160987" mass="0.0923129136" diaginertia="5.37733582e-05 5.2696881e-05 9.91466757e-06" />
+            <joint name="hip_pitch_hip_roll_left_joint" pos="0 0 0" axis="0 0 1" range="-0.785398 0.785398" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+            <geom pos="-0.045273 0.052 0.01921" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.13 0.13 0.14 1" mesh="Hip_roll_left" />
+            <geom pos="-0.045273 0.052 0.01921" quat="1 0 0 0" type="mesh" rgba="0.13 0.13 0.14 1" mesh="Hip_roll_left_collision" contype="0" conaffinity="0" group="3" />
+            <body name="hip_yaw_left" pos="0.004021 -0.064534 0.018738">
+              <inertial pos="-0.001476 -0.003453 7.3e-05" quat="0.586006 0.408069 -0.570561 0.405631" mass="0.0761310029" diaginertia="9.69609231e-06 9.24617003e-06 1.97225997e-06" />
+              <joint name="hip_roll_hip_yaw_left_joint" pos="0 0 0" axis="0 1 0" range="-1.5708 1.5708" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+              <geom pos="-0.049294 0.116783 0.000472" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.78 0.11 0.13 1" mesh="Hip_yaw_left" />
+              <geom pos="-0.049294 0.116783 0.000472" quat="1 0 0 0" type="mesh" rgba="0.78 0.11 0.13 1" mesh="Hip_yaw_left_collision" contype="0" conaffinity="0" group="3" />
+              <body name="Knee_left" pos="-0.0291 -0.040651 0.0005">
+                <inertial pos="0.005825 -0.014694 -0.00122" quat="0.425113 0.593214 -0.419175 0.540063" mass="0.0944849822" diaginertia="8.33048023e-05 7.62425386e-05 1.01457431e-05" />
+                <joint name="hip_yaw_knee_left_joint" pos="0 0 0" axis="1 0 0" range="-1.5708 0.261799" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+                <geom pos="-0.05735 0.0255 0" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.13 0.13 0.14 1" mesh="Knee_left" />
+                <geom pos="-0.05735 0.0255 0" quat="1 0 0 0" type="mesh" rgba="0.13 0.13 0.14 1" mesh="Knee_left_collision" contype="0" conaffinity="0" group="3" />
+                <body name="ankle_left" pos="0.0375 -0.094922 0">
+                  <inertial pos="-0.005655 -0.003784 0.004105" quat="-0.273912 0.850305 0.117443 0.433775" mass="0.0890548108" diaginertia="2.5040801e-05 2.36713117e-05 7.79804107e-06" />
+                  <joint name="knee_ankle_pitch_left_joint" pos="0 0 0" axis="1 0 0" range="-0.436332 1.22173" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+                  <geom pos="-0.057474 0.252434 -2.8e-05" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.78 0.11 0.13 1" mesh="Ankle_left" />
+                  <geom pos="-0.057474 0.252434 -2.8e-05" quat="1 0 0 0" type="mesh" rgba="0.78 0.11 0.13 1" mesh="Ankle_left_collision" contype="0" conaffinity="0" group="3" />
+                  <body name="Feet_left" pos="-0.00943 -0.028 -0.0023">
+                    <inertial mass="0.0803665366" pos="-0.001417 -0.004521 -0.000282" fullinertia="1.977837265e-05 1.577394725e-05 1.27403664e-05 -2.632917994e-06 -1.092181531e-06 -1.541545182e-06" />
+                    <joint name="ankle_roll_foot_left_joint" pos="0 0 0" axis="0 0 1" range="-0.349066 0.698132" actuatorfrcrange="-2.94 2.94" armature="0.01" />
+                    <geom pos="-0.085513 0.308434 0.002458" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.13 0.13 0.14 1" mesh="Feet_left" />
+                    <geom pos="-0.085513 0.308434 0.002458" quat="1 0 0 0" type="mesh" rgba="0.13 0.13 0.14 1" mesh="Feet_left_collision" contype="1" conaffinity="1" condim="3" priority="1" friction="0.8 0.02 0.001" name="left_foot_collision" />
+                    <site name="left_foot" pos="-0.013711 -0.032 -0.025678" size="0.005" rgba="0 1 0 1" group="5" />
+                    <site name="left_foot_heel" pos="-0.023012 -0.032 0.04325" size="0.004" rgba="0 0.6 1 1" group="5" />
+                    <site name="left_foot_toe" pos="-0.008512 -0.032 -0.06186" size="0.004" rgba="0 0.6 1 1" group="5" />
+                    <site name="left_foot_inner" pos="-0.036012 -0.032 -0.03436" size="0.004" rgba="1 0.3 0.8 1" group="5" />
+                    <site name="left_foot_outer" pos="0.019188 -0.032 -0.03436" size="0.004" rgba="1 0.3 0.8 1" group="5" />
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+        <site name="imu" pos="-4.22399516e-05 0.0748129114 -0.00110661111" quat="0 0 -0.707107 0.707107" size="0.012 0.008 0.002" type="box" rgba="1 0.35 0 1" group="0" />
+        <geom type="mesh" mesh="base_link_v6_base_link_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0 0 0 1" />
+        <geom type="mesh" mesh="base_link_v6_Hip_pitch_motor_right_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0 0 0 1" />
+        <geom type="mesh" mesh="base_link_v6_Hip_pitch_motor_left_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0 0 0 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9176470588 0.9176470588 0.9176470588 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_1" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.5215686275 0.5215686275 0.5882352941 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_2" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.3803921569 0.2705882353 0.2156862745 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_3" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.3411764706 0.6784313725 0.4431372549 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_4" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.1490196078 0.1450980392 0.1450980392 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_5" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.7960784314 0.7960784314 0.7960784314 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_6" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="1 1 0 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_7" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.4823529412 0.5058823529 0.5294117647 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_8" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8509803922 0.8274509804 0.7882352941 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_9" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.4 0.2745098039 0 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_10" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9843137255 0.9803921569 0.9607843137 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_11" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9647058824 0.9647058824 0.9529411765 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_12" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8941176471 0.8901960784 0.8117647059 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_13" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8588235294 0.737254902 0.4941176471 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_14" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.7803921569 0.568627451 0.1137254902 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_15" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8235294118 0.8196078431 0.7803921569 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_16" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.3176470588 0.3176470588 0.3176470588 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_17" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8156862745 0.8156862745 0.8156862745 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_18" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.6901960784 0.662745098 0.5960784314 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_19" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8078431373 0.8431372549 0.8823529412 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_20" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8 0.8 0.8 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_21" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.08235294118 0.0862745098 0.09411764706 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_22" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.2156862745 0.8 0.2039215686 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_23" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.7921568627 0.8196078431 0.9333333333 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_24" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.4509803922 0.4509803922 0.4509803922 1" />
+        <geom type="mesh" mesh="base_link_v6_servo_bus_adapter_25" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="1 1 1 1" />
+        <geom type="mesh" mesh="base_link_v6_imu_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9803921569 0.9803921569 0.9803921569 1" />
+        <geom type="mesh" mesh="base_link_v6_imu_1" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.7843137255 0.6862745098 0.3921568627 1" />
+        <geom type="mesh" mesh="base_link_v6_imu_2" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.1568627451 0.03921568627 0.3921568627 1" />
+        <geom type="mesh" mesh="base_link_v6_imu_3" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8823529412 0.8823529412 0.8823529412 1" />
+        <geom type="mesh" mesh="base_link_v6_imu_4" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8823529412 0.8823529412 0.7843137255 1" />
+        <geom type="mesh" mesh="base_link_v6_imu_5" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.09803921569 0.09803921569 0.09803921569 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0 0 0 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_1" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="1 1 1 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_2" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.6980392157 0.6980392157 0.6980392157 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_3" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.05098039216 0.6156862745 0.05098039216 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_4" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8666666667 0.4862745098 0.05882352941 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_5" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.3921568627 0.6 0.3921568627 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_6" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.09411764706 0.1450980392 0.9725490196 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_7" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="1 0.5019607843 0.7490196078 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_8" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.7490196078 0.7490196078 0.7490196078 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_9" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.968627451 0.9333333333 0.7921568627 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_10" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.6980392157 0 0 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_11" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.1215686275 0.7490196078 0.1215686275 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_12" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0 0.5019607843 0 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_13" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.2509803922 0.2509803922 0.2509803922 1" />
+        <geom type="mesh" mesh="base_link_v6_battery_14" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.7490196078 0.6392156863 0.5254901961 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9843137255 0.9803921569 0.9607843137 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_1" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9647058824 0.9647058824 0.9529411765 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_2" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="1 1 1 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_3" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.09803921569 0.09803921569 0.09803921569 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_4" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.2509803922 0.2509803922 0.2509803922 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_5" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.5019607843 0.5019607843 0.5019607843 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_6" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.6274509804 0.6274509804 0.6274509804 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_7" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.5647058824 0.3764705882 0 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_8" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9568627451 0.8980392157 0.6549019608 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_9" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.9529411765 0.7960784314 0.4862745098 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_10" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.7333333333 0.7725490196 0.7960784314 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_11" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.8431372549 0.8156862745 0.7529411765 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_12" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.01960784314 0.01960784314 0.01960784314 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_13" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.3019607843 0.3019607843 0.3019607843 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_14" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.5098039216 0.4549019608 0.3725490196 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_15" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.737254902 0.3137254902 0.1843137255 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_16" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.768627451 0.768627451 0.768627451 1" />
+        <geom type="mesh" mesh="base_link_v6_camera_controller_17" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.2980392157 0.2980392157 0.2980392157 1" />
+        <geom type="mesh" mesh="base_link_v6_power_converter_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0 0 0 1" />
+        <geom type="mesh" mesh="base_link_v6_torso_Body22_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.968627451 0.02352941176 0.02352941176 1" />
+        <geom type="mesh" mesh="base_link_v6_torso_Body23_0" pos="-0.028 0.025356 0" contype="0" conaffinity="0" group="2" density="0" rgba="0.968627451 0.02352941176 0.02352941176 1" />
+      </body>
+    </body>
+    <geom name="floor" type="plane" size="0 0 0.05" material="groundplane" contype="1" conaffinity="1" />
+    <light pos="0 0 3" dir="0 0 -1" directional="true" />
+  </worldbody>
+  <option timestep="0.002" integrator="implicitfast" />
+  <visual>
+    <global offwidth="1280" offheight="960" />
+    <scale framelength="0.06" framewidth="0.006" />
+  </visual>
+  <sensor>
+    <gyro name="imu_ang_vel" site="imu" />
+    <velocimeter name="imu_lin_vel" site="imu" />
+    <accelerometer name="imu_lin_acc" site="imu" />
+    <framequat name="imu_quat" objtype="site" objname="imu" />
+    <subtreeangmom name="root_angmom" body="base_link" />
+    <framepos name="right_foot_pos" objtype="site" objname="right_foot" />
+    <framelinvel name="right_foot_vel" objtype="site" objname="right_foot" />
+    <framepos name="left_foot_pos" objtype="site" objname="left_foot" />
+    <framelinvel name="left_foot_vel" objtype="site" objname="left_foot" />
+  </sensor>
+</mujoco>

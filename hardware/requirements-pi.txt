@@ -1,0 +1,10 @@
+# Runtime packages not supplied by Raspberry Pi OS.
+# Use 64-bit Raspberry Pi OS with Python 3.11 or newer.
+numpy>=1.26,<3
+pyserial>=3.5,<4
+evdev>=1.7,<2; sys_platform == "linux"
+mujoco==3.6.0
+feetech-servo-sdk==1.0.0
+onnxruntime==1.27.0
+smbus2==0.4.3
+scipy==1.16.1

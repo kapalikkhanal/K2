@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K2 — joint viewer</title>
+<meta name="description" content="Interactive 3D joint viewer for the K2 biped: move each of the twelve joints and see which servo drives it.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦿</text></svg>">
+<link rel="stylesheet" href="assets/css/site.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body { display: flex; flex-direction: column; }
+
+  .stage { flex: 1; display: flex; min-height: 0; }
+  .canvaswrap { flex: 1; position: relative; min-width: 0; }
+  #view { width: 100%; height: 100%; display: block; }
+
+  .overlay {
+    position: absolute; left: 18px; bottom: 16px; pointer-events: none;
+    font: 11.5px/1.7 var(--mono); color: var(--fg-faint);
+  }
+  .overlay b { color: var(--fg-dim); font-weight: 500; }
+  .toolbar {
+    position: absolute; left: 16px; top: 16px; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .toolbar button {
+    font: 500 12.5px/1 var(--sans); color: var(--fg); background: rgba(17,21,27,.9);
+    border: 1px solid var(--line-2); border-radius: 7px; padding: 9px 13px; cursor: pointer;
+    backdrop-filter: blur(8px);
+  }
+  .toolbar button:hover { border-color: var(--fg-faint); background: var(--bg-3); }
+
+  #status {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--fg-dim); font: 14px/1.7 var(--mono); text-align: center; padding: 24px;
+  }
+  #status.err { color: #ff8f8f; }
+
+  .panel {
+    width: 384px; flex: none; overflow-y: auto; border-left: 1px solid var(--line);
+    background: var(--bg-2); padding: 20px 20px 60px;
+  }
+  .panel > .intro { font-size: 13px; color: var(--fg-dim); margin: 0 0 20px; }
+  .panel > .intro b { color: var(--fg); }
+
+  .legbox { margin-bottom: 26px; }
+  .legbox h3 {
+    margin: 0 0 12px; font: 600 12px/1.4 var(--mono); letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent);
+    border-bottom: 1px solid var(--line); padding-bottom: 9px;
+  }
+  .legbox h3 span {
+    display: block; font: 400 11px/1.5 var(--mono); letter-spacing: .02em;
+    text-transform: none; color: var(--fg-faint); margin-top: 3px;
+  }
+  .legbox h3 code { background: none; padding: 0; color: var(--fg-dim); }
+
+  .jrow {
+    padding: 11px 12px; border-radius: 9px; margin-bottom: 6px;
+    border: 1px solid transparent; transition: background .12s, border-color .12s;
+  }
+  .jrow:hover { background: var(--bg-3); border-color: var(--line); }
+  .jhead { display: flex; align-items: center; gap: 8px; }
+  .jname { font-size: 14px; font-weight: 600; }
+  .servo {
+    font: 600 10px/1 var(--mono); color: var(--accent-2);
+    border: 1px solid rgba(77,208,225,.35); border-radius: 4px; padding: 3px 5px;
+  }
+  .jval { margin-left: auto; font: 500 12.5px/1 var(--mono); color: var(--fg-dim); }
+  .jdesc { margin: 6px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--fg-faint); max-width: none; }
+  .jfoot { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .lim { font: 11px/1 var(--mono); color: var(--fg-faint); }
+  .sweep {
+    margin: 0 auto; font: 500 10.5px/1 var(--mono); color: var(--fg-dim); cursor: pointer;
+    background: none; border: 1px solid var(--line-2); border-radius: 5px; padding: 4px 8px;
+  }
+  .sweep:hover { color: var(--accent); border-color: var(--accent); }
+
+  input[type=range] { width: 100%; margin: 9px 0 0; accent-color: var(--accent); }
+
+  @media (max-width: 860px) {
+    html, body { overflow: auto; height: auto; }
+    .stage { flex-direction: column; }
+    .canvaswrap { height: 58vh; flex: none; }
+    .panel { width: auto; border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap">
+    <a class="brand" href="./">K<span>2</span></a>
+    <div class="links">
+      <a href="./#videos">Video</a>
+      <a href="viewer.html" class="on">Joint viewer</a>
+      <a href="./#build">Build</a>
+      <a href="./#software">Software</a>
+      <a href="https://github.com/kapalikkhanal/K2">GitHub&nbsp;↗</a>
+    </div>
+  </div>
+</nav>
+
+<div class="stage">
+  <div class="canvaswrap">
+    <canvas id="view"></canvas>
+    <div class="toolbar">
+      <button type="button" id="preset-default">Policy stance</button>
+      <button type="button" id="preset-zero">Zero pose</button>
+    </div>
+    <div class="overlay">
+      <div><b>drag</b> orbit &nbsp; <b>scroll</b> zoom &nbsp; <b>right-drag</b> pan</div>
+      <div id="readout"></div>
+    </div>
+    <div id="status">loading model…</div>
+  </div>
+
+  <aside class="panel">
+    <p class="intro">Each slider drives one joint of the MuJoCo model the policy trains on. The <b>ID</b>
+      chip is the servo's address on the STS3215 bus, and the caption says what a
+      <b>positive</b> command does. Ranges are the robot's operational limits.</p>
+    <p class="intro" style="border-left:3px solid var(--warn);padding-left:12px">
+      <b>Naming warning.</b> The model's <code>*_right</code> chain sits on the robot's
+      <b>physical left</b> side, and vice versa. The headings below are grouped by
+      <b>physical</b> side, which is the one that matters when you are looking at the robot.</p>
+    <div id="joints"></div>
+  </aside>
+</div>
+
+<script type="module" src="assets/js/viewer.js"></script>
+</body>
+</html>
